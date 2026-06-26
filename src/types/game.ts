@@ -94,3 +94,65 @@ export interface RacingConfig {
   customTrack?: any;
 }
 
+// ============================================================================
+// FLAPPY BIRD GAME TYPES
+// ============================================================================
+
+export interface FlappyConfig {
+  populationSize: number; // số chim mỗi thế hệ
+  mutationRate: number;   // tỉ lệ đột biến (0..1)
+  gapSize: number;        // độ rộng khe giữa 2 ống (px) — độ khó
+}
+
+// ============================================================================
+// 2048 GAME TYPES
+// ============================================================================
+
+export interface Game2048Config {
+  speed: number; // tốc độ AI tự chơi ban đầu (1..8)
+}
+
+// ============================================================================
+// Q-LEARNING MAZE TYPES
+// ============================================================================
+
+export interface QMazeConfig {
+  size: number;  // kích thước lưới (vd 8..16)
+  speed: number; // tốc độ học ban đầu (bước/khung)
+}
+
+// ============================================================================
+// CONNECT FOUR TYPES
+// ============================================================================
+
+export interface Connect4Config {
+  depth: number; // độ sâu Minimax (sức mạnh AI)
+  speed: number; // tốc độ máy đấu máy (1..4)
+}
+
+// ============================================================================
+// SOCCER ARENA TYPES (2 AI tiến hoá đối kháng trong phòng kín 3D)
+// ============================================================================
+
+export interface SoccerConfig {
+  mutationRate: number; // tỉ lệ đột biến khi tiến hoá (0..1)
+  speed: number;        // số tick mô phỏng mỗi khung hình (1..8) — tua nhanh quá trình học
+}
+
+// ============================================================================
+// SOCCER 2 — Dẫn bóng + Kỹ năng sút + Va chạm cứng
+// ============================================================================
+
+export interface Soccer2Config {
+  mutationRate: number;
+  speed: number;
+}
+
+// ============================================================================
+// TAG GAME — Đuổi bắt 3D (Chaser vs Evader)
+// ============================================================================
+
+export interface TagConfig {
+  mutationRate: number; // tỉ lệ đột biến (0..1)
+  speed: number;        // số tick mô phỏng mỗi frame
+}

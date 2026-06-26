@@ -12,7 +12,6 @@
 |----------|-------|------------|
 | ♟️ **Gomoku / Cờ Caro (20x20)** | Đấu trường AI cờ caro. Huấn luyện các thế cờ từ con số 0. | Heuristic + Minimax, MCTS (UCT), Genetic Brains |
 | 🏎️ **Racing / Đua xe AI** | Huấn luyện thế hệ xe tự lái né chướng ngại vật & đường cua. | Neural Network, Genetic Algorithm, Raycasting Sensors |
-| ⚽ **ANN Football / Bóng đá GA** | AI học đá bóng qua các bước: tìm bóng → ghi bàn → 1vs1. | Curriculum Learning, Neural Network, Genetic Algorithm |
 | 🀄 **Xiangqi / Cờ Tướng** | *(Sắp ra mắt)* Alpha-Beta Pruning, Piece-Square Tables. | Minimax |
 
 ---
@@ -81,9 +80,8 @@ AI_Lab/
 ├── index.html              # Entry point của web
 ├── src/
 │   ├── App.tsx             # Điều hướng màn hình
-│   ├── components/         # Các màn hình UI (Select, Setup, Training, Racing, Football...)
-│   ├── game/               # Logic engine (FifaEngine...)
-│   ├── utils/              # Giải thuật AI: minimax, mcts, neuralNetwork, trainer, evaluator, zobrist...
+│   ├── components/         # Các màn hình UI (Select, Setup, Training, Racing...)
+│   ├── utils/              # Giải thuật AI: minimax, mcts, trainer, evaluator, zobrist...
 │   ├── hooks/              # React hooks (useAIWorker)
 │   ├── workers/            # Web Workers chạy AI nền
 │   └── types/              # Định nghĩa kiểu TypeScript

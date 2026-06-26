@@ -1,20 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Play, Settings, ArrowLeft, RefreshCw, Brain } from 'lucide-react';
-import { AIConfig, AIAlgorithm, RacingConfig } from '../types/game';
-import { FootballConfig, CurriculumStep } from '../types/football';
+import { AIConfig, AIAlgorithm, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, Soccer2Config, TagConfig } from '../types/game';
 import { getZeroWeights } from '../utils/trainer';
 import { getPresetTrack, generateRandomTrack } from '../utils/racingPhysics';
+import { FLAPPY, FlappyPipe, createPopulation, stepWorld, heuristicFlap } from '../utils/flappy';
+import Game2048Preview from './Game2048Preview';
+import QMazePreview from './QMazePreview';
+import Connect4Preview from './Connect4Preview';
+import SoccerPreview from './SoccerPreview';
 import TrackBuilder from './TrackBuilder';
 
 interface SetupScreenProps {
-  gameType: 'caro' | 'racing' | 'football';
+  gameType: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag';
   onBack: () => void;
   onLaunchArena: (config1: AIConfig, config2: AIConfig, initFromScratch: boolean) => void;
   onLaunchRacing: (config: RacingConfig) => void;
-  onLaunchFootball: (config: FootballConfig) => void;
+  onLaunchFlappy: (config: FlappyConfig) => void;
+  onLaunch2048: (config: Game2048Config) => void;
+  onLaunchQMaze: (config: QMazeConfig) => void;
+  onLaunchConnect4: (config: Connect4Config) => void;
+  onLaunchSoccer: (config: SoccerConfig) => void;
+  onLaunchTag: (config: TagConfig) => void;
 }
 
-export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchRacing, onLaunchFootball }: SetupScreenProps) {
+export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchRacing, onLaunchFlappy, onLaunch2048, onLaunchQMaze, onLaunchConnect4, onLaunchSoccer, onLaunchTag }: SetupScreenProps) {
   // Caro Config states
   const [algo1, setAlgo1] = useState<AIAlgorithm>('MINIMAX');
   const [algo2, setAlgo2] = useState<AIAlgorithm>('MCTS');
@@ -35,10 +44,29 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
   const [enablePlayerCar, setEnablePlayerCar] = useState<boolean>(false);
   const [showTrackBuilder, setShowTrackBuilder] = useState<boolean>(false);
 
-  // Football Config states
-  const [footballPopulation, setFootballPopulation] = useState<number>(5);
-  const [footballMutationRate, setFootballMutationRate] = useState<number>(0.1);
-  const [footballStep, setFootballStep] = useState<CurriculumStep>(1);
+  // Flappy Bird Config states
+  const [flappyPopulation, setFlappyPopulation] = useState<number>(150);
+  const [flappyMutationRate, setFlappyMutationRate] = useState<number>(0.1);
+  const [flappyGap, setFlappyGap] = useState<number>(160);
+
+  // 2048 Config state
+  const [g2048Speed, setG2048Speed] = useState<number>(4);
+
+  // Q-learning Maze Config state
+  const [qSize, setQSize] = useState<number>(12);
+  const [qSpeed, setQSpeed] = useState<number>(25);
+
+  // Connect Four Config state
+  const [c4Depth, setC4Depth] = useState<number>(6);
+  const [c4Speed, setC4Speed] = useState<number>(2);
+
+  // Soccer Config state
+  const [soccerMutation, setSoccerMutation] = useState<number>(0.1);
+  const [soccerSpeed, setSoccerSpeed] = useState<number>(2);
+
+  // Tag game Config state
+  const [tagMutation, setTagMutation] = useState<number>(0.12);
+  const [tagSpeed, setTagSpeed] = useState<number>(2);
 
   // Canvas ref for the lightweight looping simulator on the left
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -448,6 +476,88 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
     };
   }, [gameType, trackId]);
 
+  // ── Mô phỏng Flappy Bird trực tiếp ở panel trái (xem AI học theo cấu hình) ──
+  useEffect(() => {
+    if (gameType !== 'flappy') return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    const CW = canvas.width, CH = canvas.height;
+    // Mô phỏng dùng 1 chim điều khiển bằng quy tắc thông minh → chơi giỏi, hiếm khi chết
+    let birds = createPopulation(1);
+    let pipes: FlappyPipe[] = [];
+    let raf = 0;
+    const scale = Math.min(CW / FLAPPY.WIDTH, CH / FLAPPY.HEIGHT);
+    const offX = (CW - FLAPPY.WIDTH * scale) / 2;
+    const offY = (CH - FLAPPY.HEIGHT * scale) / 2;
+    const bottom = FLAPPY.HEIGHT - FLAPPY.GROUND_H;
+
+    const draw = () => {
+      const r = stepWorld(birds, pipes, flappyGap, heuristicFlap);
+      if (r.aliveCount === 0) {
+        birds = createPopulation(1);
+        pipes = [];
+      }
+
+      ctx.fillStyle = '#0b1220';
+      ctx.fillRect(0, 0, CW, CH);
+      ctx.save();
+      ctx.translate(offX, offY);
+      ctx.scale(scale, scale);
+      // Giới hạn vẽ trong đúng khung world → ống/đất không tràn ra vùng nền ngoài
+      ctx.beginPath();
+      ctx.rect(0, 0, FLAPPY.WIDTH, FLAPPY.HEIGHT);
+      ctx.clip();
+
+      // trời + đất
+      const sky = ctx.createLinearGradient(0, 0, 0, FLAPPY.HEIGHT);
+      sky.addColorStop(0, '#4ec0ca');
+      sky.addColorStop(1, '#9be7ec');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, FLAPPY.WIDTH, FLAPPY.HEIGHT);
+
+      for (const p of pipes) {
+        const gapTop = p.gapY - flappyGap / 2;
+        const gapBot = p.gapY + flappyGap / 2;
+        ctx.fillStyle = '#74c948';
+        ctx.strokeStyle = '#23491a';
+        ctx.lineWidth = 3;
+        ctx.fillRect(p.x, 0, FLAPPY.PIPE_W, gapTop);
+        ctx.strokeRect(p.x, 0, FLAPPY.PIPE_W, gapTop);
+        ctx.fillRect(p.x, gapBot, FLAPPY.PIPE_W, bottom - gapBot);
+        ctx.strokeRect(p.x, gapBot, FLAPPY.PIPE_W, bottom - gapBot);
+      }
+
+      ctx.fillStyle = '#ded895';
+      ctx.fillRect(0, bottom, FLAPPY.WIDTH, FLAPPY.GROUND_H);
+      ctx.fillStyle = '#73bf2e';
+      ctx.fillRect(0, bottom, FLAPPY.WIDTH, 12);
+
+      // Chỉ hiển thị 1 con: con AI đang sống có fitness cao nhất (đại diện)
+      const best = birds.find(b => b.alive) ?? null;
+      if (best) {
+        ctx.fillStyle = '#facc15'; // vàng kiểu Flappy
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(FLAPPY.BIRD_X, best.y, FLAPPY.BIRD_R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(FLAPPY.BIRD_X + 5, best.y - 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+      raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [gameType, flappyGap]);
+
   const handleLaunch = () => {
 
     if (gameType === 'racing') {
@@ -464,14 +574,37 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
       return;
     }
 
-    if (gameType === 'football') {
-      const fbConfig: FootballConfig = {
-        populationSize: footballPopulation,
-        mutationRate: footballMutationRate,
-        step: footballStep,
-        matchDuration: 800
-      };
-      onLaunchFootball(fbConfig);
+    if (gameType === 'flappy') {
+      onLaunchFlappy({
+        populationSize: flappyPopulation,
+        mutationRate: flappyMutationRate,
+        gapSize: flappyGap,
+      });
+      return;
+    }
+
+    if (gameType === '2048') {
+      onLaunch2048({ speed: g2048Speed });
+      return;
+    }
+
+    if (gameType === 'qmaze') {
+      onLaunchQMaze({ size: qSize, speed: qSpeed });
+      return;
+    }
+
+    if (gameType === 'connect4') {
+      onLaunchConnect4({ depth: c4Depth, speed: c4Speed });
+      return;
+    }
+
+    if (gameType === 'soccer') {
+      onLaunchSoccer({ mutationRate: soccerMutation, speed: soccerSpeed });
+      return;
+    }
+
+    if (gameType === 'tag') {
+      onLaunchTag({ mutationRate: tagMutation, speed: tagSpeed });
       return;
     }
 
@@ -554,72 +687,179 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
               </div>
             </div>
 
-            {/* Canvas Container */}
+            {/* Canvas Container (2048 dùng bàn DOM có hoạt ảnh thay cho canvas) */}
             <div className="flex-grow flex items-center justify-center relative p-2">
-              <canvas
-                ref={canvasRef}
-                width={450}
-                height={450}
-                className="max-w-full aspect-square border border-slate-900 rounded-xl shadow-2xl"
-              />
+              {gameType === '2048' ? (
+                <Game2048Preview size={360} />
+              ) : gameType === 'qmaze' ? (
+                <QMazePreview size={380} gridSize={10} />
+              ) : gameType === 'connect4' ? (
+                <Connect4Preview size={392} />
+              ) : gameType === 'soccer' ? (
+                <SoccerPreview size={420} mutationRate={soccerMutation} />
+              ) : gameType === 'tag' ? (
+                <SoccerPreview size={420} mutationRate={tagMutation} />
+              ) : (
+                <canvas
+                  ref={canvasRef}
+                  width={450}
+                  height={450}
+                  className="max-w-full aspect-square border border-slate-900 rounded-xl shadow-2xl"
+                />
+              )}
             </div>
 
              {/* Telemetry Stats below canvas */}
-             {gameType === 'football' ? (
-                <div className="sim-stats-grid font-mono text-center">
-                  <div className="sim-stat-card">
-                    <span className="text-[10px] text-slate-500 block mb-1">KIỂU MẠNG</span>
-                    <span className="text-lg font-bold text-white">ANN</span>
-                  </div>
-                  <div className="sim-stat-card">
-                    <span className="text-[10px] text-purple-400 block mb-1">ĐÀO TẠO</span>
-                    <span className="text-lg font-bold text-purple-400">Curriculum</span>
-                  </div>
-                  <div className="sim-stat-card">
-                    <span className="text-[10px] text-cyan-400 block mb-1">NHÓM</span>
-                    <span className="text-lg font-bold text-cyan-400">GA</span>
-                  </div>
-                  <div className="sim-stat-card">
-                    <span className="text-[10px] text-amber-400 block mb-1">TẦN SỐ</span>
-                    <span className="text-lg font-bold text-amber-400">60 FPS</span>
-                  </div>
-                </div>
-             ) : gameType === 'caro' ? (
+             {gameType === 'caro' ? (
                <div className="sim-stats-grid font-mono text-center">
                  <div className="sim-stat-card">
                    <span className="text-[10px] text-slate-500 block mb-1">SỐ VÁN ĐẤU</span>
-                   <span className="text-lg font-bold text-white">{simStats.games}</span>
+                   <span className="text-base font-bold text-white">{simStats.games}</span>
                  </div>
                  <div className="sim-stat-card">
                    <span className="text-[10px] text-purple-400 block mb-1">X THẮNG</span>
-                   <span className="text-lg font-bold text-purple-400">{simStats.xWins}</span>
+                   <span className="text-base font-bold text-purple-400">{simStats.xWins}</span>
                  </div>
                  <div className="sim-stat-card">
                    <span className="text-[10px] text-cyan-400 block mb-1">O THẮNG</span>
-                   <span className="text-lg font-bold text-cyan-400">{simStats.oWins}</span>
+                   <span className="text-base font-bold text-cyan-400">{simStats.oWins}</span>
                  </div>
                  <div className="sim-stat-card">
                    <span className="text-[10px] text-amber-400 block mb-1">SỐ NƯỚC/VÁN</span>
-                   <span className="text-lg font-bold text-amber-400">{simStats.avgMoves}</span>
+                   <span className="text-base font-bold text-amber-400">{simStats.avgMoves}</span>
                  </div>
                </div>
-             ) : (
+             ) : gameType === 'racing' ? (
                 <div className="sim-stats-grid font-mono text-center">
                   <div className="sim-stat-card">
                     <span className="text-[10px] text-slate-500 block mb-1">KIỂU MẠNG</span>
-                    <span className="text-lg font-bold text-white">ANN</span>
+                    <span className="text-base font-bold text-white">ANN</span>
                   </div>
                   <div className="sim-stat-card">
                     <span className="text-[10px] text-purple-400 block mb-1">ĐÀO TẠO</span>
-                    <span className="text-lg font-bold text-purple-400">Tiến Hóa</span>
+                    <span className="text-sm font-bold text-purple-400">Tiến Hóa</span>
                   </div>
                   <div className="sim-stat-card">
                     <span className="text-[10px] text-cyan-400 block mb-1">CẢM BIẾN</span>
-                    <span className="text-lg font-bold text-cyan-400">Tia Quét</span>
+                    <span className="text-sm font-bold text-cyan-400">Tia Quét</span>
                   </div>
                   <div className="sim-stat-card">
                     <span className="text-[10px] text-amber-400 block mb-1">TẦN SỐ</span>
-                    <span className="text-lg font-bold text-amber-400">60 FPS</span>
+                    <span className="text-base font-bold text-amber-400">60 FPS</span>
+                  </div>
+                </div>
+              ) : gameType === 'flappy' ? (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">KIỂU MẠNG</span>
+                    <span className="text-xs font-bold text-white">ANN [4·6·1]</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-purple-400 block mb-1">ĐÀO TẠO</span>
+                    <span className="text-sm font-bold text-purple-400">Tiến Hóa</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-cyan-400 block mb-1">CHỌN LỌC</span>
+                    <span className="text-xs font-bold text-cyan-400">Elitism + Lai</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">TẦN SỐ</span>
+                    <span className="text-base font-bold text-amber-400">60 FPS</span>
+                  </div>
+                </div>
+              ) : gameType === '2048' ? (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">THUẬT TOÁN</span>
+                    <span className="text-sm font-bold text-white">Expectimax</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-purple-400 block mb-1">LƯỚI</span>
+                    <span className="text-base font-bold text-purple-400">4 × 4</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-cyan-400 block mb-1">ĐÁNH GIÁ</span>
+                    <span className="text-sm font-bold text-cyan-400">Heuristic</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">ĐẠT 2048</span>
+                    <span className="text-base font-bold text-amber-400">~63%</span>
+                  </div>
+                </div>
+              ) : gameType === 'qmaze' ? (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">THUẬT TOÁN</span>
+                    <span className="text-sm font-bold text-white">Q-Learning</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-purple-400 block mb-1">CHIẾN LƯỢC</span>
+                    <span className="text-sm font-bold text-purple-400">ε-greedy</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-cyan-400 block mb-1">HỌC</span>
+                    <span className="text-sm font-bold text-cyan-400">Bảng Q</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">HỘI TỤ</span>
+                    <span className="text-sm font-bold text-amber-400">Tối ưu</span>
+                  </div>
+                </div>
+              ) : gameType === 'soccer' ? (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">THUẬT TOÁN</span>
+                    <span className="text-xs font-bold text-white">Neuroevolution</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-purple-400 block mb-1">ĐỐI KHÁNG</span>
+                    <span className="text-base font-bold text-purple-400">2 AI</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-cyan-400 block mb-1">SÂN RỘNG</span>
+                    <span className="text-base font-bold text-cyan-400">3D V2</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">NHẢY CAO</span>
+                    <span className="text-sm font-bold text-amber-400">CD 90 tick</span>
+                  </div>
+                </div>
+              ) : gameType === 'tag' ? (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">THUẬT TOÁN</span>
+                    <span className="text-xs font-bold text-white">Neuroevolution</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-red-400 block mb-1">CHASER</span>
+                    <span className="text-sm font-bold text-red-400">Đuổi bắt</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-green-400 block mb-1">EVADER</span>
+                    <span className="text-sm font-bold text-green-400">Trốn tránh</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">PHÒNG 3D</span>
+                    <span className="text-sm font-bold text-amber-400">4 trụ cột</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">THUẬT TOÁN</span>
+                    <span className="text-sm font-bold text-white">Minimax</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-purple-400 block mb-1">TỐI ƯU</span>
+                    <span className="text-sm font-bold text-purple-400">Alpha-Beta</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-cyan-400 block mb-1">BÀN</span>
+                    <span className="text-base font-bold text-cyan-400">7 × 6</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">NỐI</span>
+                    <span className="text-sm font-bold text-amber-400">4 quân</span>
                   </div>
                 </div>
               )}
@@ -972,45 +1212,23 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
               </div>
             )}
 
-            {gameType === 'football' && (
+            {gameType === 'flappy' && (
               <div>
-                <div className="mb-4 text-left">
-                  <label className="block text-xs font-mono text-slate-400 uppercase tracking-wider mb-2">
-                    Lựa Chọn Bước Khởi Tạo:
-                  </label>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2" style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={() => setFootballStep(1)}
-                        className={`flex-grow cyber-btn text-[10px] py-2 px-2.5 font-mono ${footballStep === 1 ? 'cyber-btn-purple' : 'cyber-btn-outline'}`}
-                      >
-                        Bước 1: Tìm Bóng
-                      </button>
-                      <button
-                        onClick={() => setFootballStep(2)}
-                        className={`flex-grow cyber-btn text-[10px] py-2 px-2.5 font-mono ${footballStep === 2 ? 'cyber-btn-cyan' : 'cyber-btn-outline'}`}
-                      >
-                        Bước 2: Ghi Bàn
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="config-ai-card mt-4">
+                <div className="config-ai-card">
                   <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                    <Brain className="w-4 h-4 text-purple-400" />
-                    Tham Số Tiến Hóa (GA):
+                    <Brain className="w-4 h-4 text-amber-400" />
+                    Tham Số Tiến Hóa (Neuroevolution):
                   </h3>
 
                   <div className="setting-slider-group mb-4">
                     <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
-                      <span>Quần Thể (Số Lượng AI):</span>
-                      <span className="text-purple-400 font-bold">{footballPopulation} Player</span>
+                      <span>Quần Thể (Số Chim/Thế Hệ):</span>
+                      <span className="text-amber-400 font-bold">{flappyPopulation} chim</span>
                     </div>
                     <input
-                      type="range" min="3" max="20" step="1"
-                      value={footballPopulation}
-                      onChange={(e) => setFootballPopulation(parseInt(e.target.value))}
+                      type="range" min="20" max="500" step="10"
+                      value={flappyPopulation}
+                      onChange={(e) => setFlappyPopulation(parseInt(e.target.value))}
                       className="slider-styled"
                     />
                   </div>
@@ -1018,21 +1236,244 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                   <div className="setting-slider-group mb-4">
                     <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
                       <span>Tỷ Lệ Đột Biến:</span>
-                      <span className="text-cyan-400 font-bold">{(footballMutationRate * 100).toFixed(0)}%</span>
+                      <span className="text-cyan-400 font-bold">{(flappyMutationRate * 100).toFixed(0)}%</span>
                     </div>
                     <input
                       type="range" min="0.01" max="0.5" step="0.01"
-                      value={footballMutationRate}
-                      onChange={(e) => setFootballMutationRate(parseFloat(e.target.value))}
+                      value={flappyMutationRate}
+                      onChange={(e) => setFlappyMutationRate(parseFloat(e.target.value))}
+                      className="slider-styled slider-styled-cyan"
+                    />
+                  </div>
+
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Độ Rộng Khe Ống (độ khó):</span>
+                      <span className="text-emerald-400 font-bold">{flappyGap}px {flappyGap >= 180 ? '(Dễ)' : flappyGap >= 140 ? '(Vừa)' : '(Khó)'}</span>
+                    </div>
+                    <input
+                      type="range" min="130" max="220" step="10"
+                      value={flappyGap}
+                      onChange={(e) => setFlappyGap(parseInt(e.target.value))}
+                      className="slider-styled"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  Mỗi chim được điều khiển bởi một mạng nơ-ron riêng. Khi cả đàn chết, thế hệ mới
+                  sinh ra từ những con bay xa nhất (giữ tinh hoa + lai ghép + đột biến). Quan sát số
+                  thế hệ tăng và đàn chim giỏi dần.
+                </p>
+              </div>
+            )}
+
+            {gameType === '2048' && (
+              <div>
+                <div className="config-ai-card">
+                  <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-orange-400" />
+                    Cấu Hình AI (Expectimax):
+                  </h3>
+
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc độ AI tự chơi:</span>
+                      <span className="text-orange-400 font-bold">{g2048Speed}x</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="8" step="1"
+                      value={g2048Speed}
+                      onChange={(e) => setG2048Speed(parseInt(e.target.value))}
+                      className="slider-styled"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  AI dùng tìm kiếm <span className="text-orange-400">Expectimax</span> (cây kỳ vọng) với hàm
+                  đánh giá heuristic (ô trống, đơn điệu, độ mượt, ô lớn ở góc) để gộp ô đạt 2048 và hơn nữa.
+                  Vào game có thể bấm <span className="text-cyan-300">TỰ CHƠI</span> để tự điều khiển bằng phím mũi tên.
+                </p>
+              </div>
+            )}
+
+            {gameType === 'qmaze' && (
+              <div>
+                <div className="config-ai-card">
+                  <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-blue-400" />
+                    Cấu Hình Học Tăng Cường:
+                  </h3>
+
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Kích thước mê cung:</span>
+                      <span className="text-blue-400 font-bold">{qSize} × {qSize}</span>
+                    </div>
+                    <input
+                      type="range" min="6" max="18" step="1"
+                      value={qSize}
+                      onChange={(e) => setQSize(parseInt(e.target.value))}
+                      className="slider-styled"
+                    />
+                  </div>
+
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc độ học (bước/khung):</span>
+                      <span className="text-cyan-400 font-bold">{qSpeed}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="150" step="1"
+                      value={qSpeed}
+                      onChange={(e) => setQSpeed(parseInt(e.target.value))}
                       className="slider-styled slider-styled-cyan"
                     />
                   </div>
                 </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  Tác nhân học bằng <span className="text-blue-400">Q-Learning</span> (ε-greedy): khám phá nhiều
+                  lúc đầu rồi khai thác dần. Quan sát <span className="text-white">bản đồ nhiệt giá trị Q</span> và
+                  <span className="text-white"> mũi tên chính sách</span> hội tụ về đường ngắn nhất tới đích.
+                </p>
+              </div>
+            )}
+
+            {gameType === 'connect4' && (
+              <div>
+                <div className="config-ai-card">
+                  <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-red-400" />
+                    Cấu Hình AI (Minimax):
+                  </h3>
+
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Độ sâu tìm kiếm (sức mạnh AI):</span>
+                      <span className="text-red-400 font-bold">{c4Depth} {c4Depth <= 4 ? '(Dễ)' : c4Depth <= 6 ? '(Khá)' : '(Mạnh)'}</span>
+                    </div>
+                    <input
+                      type="range" min="2" max="8" step="1"
+                      value={c4Depth}
+                      onChange={(e) => setC4Depth(parseInt(e.target.value))}
+                      className="slider-styled"
+                    />
+                  </div>
+
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc độ máy đấu máy:</span>
+                      <span className="text-cyan-400 font-bold">{c4Speed}×</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="8" step="1"
+                      value={c4Speed}
+                      onChange={(e) => setC4Speed(parseInt(e.target.value))}
+                      className="slider-styled slider-styled-cyan"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  Thả quân vào cột, nối được <span className="text-white">4 quân thẳng hàng</span> (ngang/dọc/chéo) là thắng.
+                  AI tính nước bằng <span className="text-red-400">Minimax + cắt tỉa Alpha-Beta</span>. Vào game bấm
+                  <span className="text-cyan-300"> TỰ CHƠI</span> để đấu với máy (bạn cầm quân đỏ).
+                </p>
+              </div>
+            )}
+
+            {gameType === 'soccer' && (
+              <div>
+                <div className="config-ai-card">
+                  <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-emerald-400" />
+                    Cấu Hình Tiến Hóa (Neuroevolution):
+                  </h3>
+
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tỷ Lệ Đột Biến:</span>
+                      <span className="text-emerald-400 font-bold">{(soccerMutation * 100).toFixed(0)}%</span>
+                    </div>
+                    <input
+                      type="range" min="0.02" max="0.4" step="0.02"
+                      value={soccerMutation}
+                      onChange={(e) => setSoccerMutation(parseFloat(e.target.value))}
+                      className="slider-styled slider-styled-emerald"
+                    />
+                  </div>
+
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc Độ Tua Học (tick/khung):</span>
+                      <span className="text-cyan-400 font-bold">{soccerSpeed}×</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="8" step="1"
+                      value={soccerSpeed}
+                      onChange={(e) => setSoccerSpeed(parseInt(e.target.value))}
+                      className="slider-styled slider-styled-cyan"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  Hai AI dạng khối đấu tay đôi trong <span className="text-white">phòng 3D góc rộng</span>. Bản này bổ sung
+                  <span className="text-emerald-300"> kỹ năng Nhảy cao (Jump)</span> có cooldown để né tránh và tranh bóng bổng, cùng
+                  <span className="text-white"> lưới vát gôn thực tế</span>. Cầu thủ tiến hóa thế hệ liên tục.
+                </p>
+              </div>
+            )}
+
+            {gameType === 'tag' && (
+              <div>
+                <div className="config-ai-card">
+                  <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-red-400" />
+                    Cấu Hình Đuổi Bắt (Neuroevolution):
+                  </h3>
+
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tỷ Lệ Đột Biến:</span>
+                      <span className="text-red-400 font-bold">{(tagMutation * 100).toFixed(0)}%</span>
+                    </div>
+                    <input
+                      type="range" min="0.02" max="0.5" step="0.02"
+                      value={tagMutation}
+                      onChange={(e) => setTagMutation(parseFloat(e.target.value))}
+                      className="slider-styled slider-styled-emerald"
+                    />
+                  </div>
+
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc Độ Tua Học (tick/khung):</span>
+                      <span className="text-cyan-400 font-bold">{tagSpeed}×</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="16" step="1"
+                      value={tagSpeed}
+                      onChange={(e) => setTagSpeed(parseInt(e.target.value))}
+                      className="slider-styled slider-styled-cyan"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  <span className="text-red-400">AI Chaser (đỏ)</span> tự học cách đuổi bắt,{' '}
+                  <span className="text-green-400">AI Evader (xanh)</span> tự học cách trốn. Cả hai tiến hóa song song — Chaser bắt đủ{' '}
+                  <span className="text-amber-300">5 lần</span> thì thắng ván, hết{' '}
+                  <span className="text-amber-300">60 giây</span> chưa bắt đủ thì Evader thắng.
+                  4 trụ cột trong phòng tạo thêm <span className="text-white">chiến thuật</span>.
+                </p>
               </div>
             )}
 
           </div>
- 
+
           {/* Launch CTA */}
           <div className="pt-4 mt-6 text-left" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
             <button
@@ -1040,18 +1481,38 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
               className="w-full cyber-btn cyber-btn-purple text-base py-4 font-bold pulse-glow-purple"
             >
               <Play className="w-5 h-5 fill-current" />
-              {gameType === 'caro' 
-                ? 'TIẾN VÀO ĐẤU TRƯỜNG HUẤN LUYỆN' 
+              {gameType === 'caro'
+                ? 'TIẾN VÀO ĐẤU TRƯỜNG HUẤN LUYỆN'
                 : gameType === 'racing'
                 ? 'KHỞI CHẠY ĐUA XE TIẾN HÓA'
-                : 'HUẤN LUYỆN BÓNG ĐÁ ANN'}
+                : gameType === 'flappy'
+                ? 'KHỞI CHẠY FLAPPY BIRD AI'
+                : gameType === '2048'
+                ? 'KHỞI CHẠY 2048 AI'
+                : gameType === 'qmaze'
+                ? 'KHỞI CHẠY MÊ CUNG Q-LEARNING'
+                : gameType === 'soccer'
+                ? 'KHỞI CHẠY BÓNG ĐÁ AI 3D'
+                : gameType === 'tag'
+                ? '🎯 KHỞI CHẠY ĐUỔI BẮT AI 3D'
+                : 'KHỞI CHẠY CONNECT FOUR'}
             </button>
             <p className="text-[10px] text-center text-slate-500 font-mono mt-3">
-              {gameType === 'caro' 
+              {gameType === 'caro'
                 ? '* Cả hai bộ não AI luôn được huấn luyện tiến hóa tự động từ con số 0 (Zero Knowledge).'
                 : gameType === 'racing'
                 ? '* Các xe đua sẽ tự động tiến hóa, học cách né vật cản từ con số 0 dựa trên phản hồi tia quét.'
-                : '* Đào tạo AI theo lộ trình tìm bóng, sút bóng và đối kháng tiến hóa di truyền.'}
+                : gameType === 'flappy'
+                ? '* Đàn chim tự học vượt ống từ con số 0 bằng mạng nơ-ron và tiến hóa di truyền.'
+                : gameType === '2048'
+                ? '* AI dùng tìm kiếm Expectimax để chơi 2048; bạn cũng có thể tự chơi bằng phím mũi tên.'
+                : gameType === 'qmaze'
+                ? '* Tác nhân học tăng cường (Q-Learning) tự tìm đường ngắn nhất; xem bản đồ nhiệt Q hội tụ.'
+                : gameType === 'soccer'
+                ? '* Bản nâng cấp Soccer V2 bổ sung kỹ năng nhảy cao né tránh và tranh bóng bổng có cooldown, cải tiến vật lý lưới vát gôn.'
+                : gameType === 'tag'
+                ? '* Chaser học đuổi, Evader học trốn — cả hai tiến hóa song song trong phòng 3D với 4 trụ cột chướng ngại.'
+                : '* AI dùng Minimax + Alpha-Beta để chơi Connect Four; bấm TỰ CHƠI để đấu với máy.'}
             </p>
           </div>
           </div>

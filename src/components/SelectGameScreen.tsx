@@ -13,51 +13,96 @@ interface GameCard {
   imageGlow: string;
 }
 
-export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (gameId: 'caro' | 'racing' | 'football') => void }) {
+export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (gameId: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag') => void }) {
+  // Sắp xếp theo ĐỘ KHÓ LẬP TRÌNH tăng dần (dễ → khó)
   const games: GameCard[] = [
     {
-      id: 'caro',
-      name: 'GOMOKU / CARO',
-      vietnameseName: 'Cờ Caro 20x20',
-      description: 'Chế độ đấu trường AI. Huấn luyện các thế cờ từ con số 0 dựa trên giải thuật di truyền và học tăng cường.',
-      size: '20x20 Grid',
+      id: 'flappy',
+      name: 'FLAPPY BIRD',
+      vietnameseName: 'Chim Bay Né Ống',
+      description: 'Đàn chim do AI điều khiển tự học vượt ống và giỏi dần qua từng thế hệ (mạng nơ-ron + tiến hóa di truyền). Có chế độ tự chơi.',
+      size: 'Né chướng ngại',
       active: true,
-      algorithms: ['Heuristic + Minimax', 'MCTS UCT', 'Genetic Brains'],
-      difficulty: 'Tự động tiến hóa',
-      imageGlow: 'from-purple-500/20 to-cyan-500/20'
+      algorithms: ['Mạng nơ-ron', 'Tiến hóa di truyền', 'Neuroevolution'],
+      difficulty: 'Lập trình: Dễ',
+      imageGlow: 'from-amber-500/20 to-yellow-500/20'
+    },
+    {
+      id: 'qmaze',
+      name: 'MÊ CUNG AI',
+      vietnameseName: 'Robot Thoát Mê Cung',
+      description: 'AI tự học cách tìm đường ngắn nhất ra khỏi mê cung bằng học tăng cường. Xem bản đồ nhiệt và mũi tên chỉ đường sáng dần lên.',
+      size: 'Tìm đường',
+      active: true,
+      algorithms: ['Q-Learning', 'Học tăng cường', 'ε-greedy'],
+      difficulty: 'Lập trình: Vừa',
+      imageGlow: 'from-blue-500/20 to-indigo-500/20'
+    },
+    {
+      id: '2048',
+      name: '2048',
+      vietnameseName: 'Game 2048',
+      description: 'AI tự chơi 2048 để gộp ô đạt 2048 và hơn nữa, với hoạt ảnh mượt. Bạn cũng có thể tự chơi bằng phím mũi tên.',
+      size: 'Lưới 4×4',
+      active: true,
+      algorithms: ['Tìm kiếm Expectimax', 'Hàm đánh giá', 'Heuristic'],
+      difficulty: 'Lập trình: Vừa+',
+      imageGlow: 'from-orange-500/20 to-amber-500/20'
+    },
+    {
+      id: 'connect4',
+      name: 'CONNECT FOUR',
+      vietnameseName: 'Cờ Thả 4 Quân',
+      description: 'Thả quân vào cột, ai nối được 4 quân thẳng hàng (ngang/dọc/chéo) sẽ thắng. AI tính nước bằng Minimax + cắt tỉa Alpha-Beta. Đấu với máy hoặc xem máy đấu máy.',
+      size: 'Bàn 7×6',
+      active: true,
+      algorithms: ['Minimax', 'Cắt tỉa Alpha-Beta', 'Heuristic'],
+      difficulty: 'Lập trình: Vừa+',
+      imageGlow: 'from-red-500/20 to-yellow-500/20'
     },
     {
       id: 'racing',
-      name: 'RACING / ĐUA XE AI',
-      vietnameseName: 'Đua Xe Mô Phỏng AI',
-      description: 'Huấn luyện thế hệ xe tự lái bằng mạng nơ-ron nhân tạo kết hợp giải thuật di truyền. Tránh chướng ngại vật và đường cua hiểm trở.',
-      size: 'Vector Track',
+      name: 'ĐUA XE AI',
+      vietnameseName: 'Đua Xe Tự Lái',
+      description: 'Đàn xe tự học lái, né chướng ngại và ôm cua bằng cảm biến tia quét (mạng nơ-ron + tiến hóa di truyền). Có trình tạo đường đua.',
+      size: 'Đường đua',
       active: true,
-      algorithms: ['Neural Network', 'Genetic Algorithm', 'Raycasting Sensors'],
-      difficulty: 'Tiến hóa liên tục',
+      algorithms: ['Mạng nơ-ron', 'Tiến hóa di truyền', 'Cảm biến tia quét'],
+      difficulty: 'Lập trình: Khó',
       imageGlow: 'from-pink-500/20 to-rose-500/20'
     },
     {
-      id: 'football',
-      name: 'ANN FOOTBALL / BÓNG ĐÁ GA',
-      vietnameseName: 'Học Máy Bóng Đá GA',
-      description: 'Huấn luyện AI đá bóng qua các bước tìm bóng, ghi bàn, 1vs1 sử dụng Mạng Nơ-ron nhân tạo và Học sâu tiến hóa.',
-      size: '800x500 Pitch',
+      id: 'caro',
+      name: 'CỜ CARO',
+      vietnameseName: 'Cờ Caro (Gomoku)',
+      description: 'Đấu trường cờ caro 20×20. Hai AI đối đầu bằng Minimax + MCTS và hàm đánh giá thế cờ, huấn luyện từ con số 0.',
+      size: 'Lưới 20×20',
       active: true,
-      algorithms: ['Curriculum Learning', 'Neural Network', 'Genetic Algorithm'],
-      difficulty: 'Tiến hóa liên tục',
-      imageGlow: 'from-emerald-500/20 to-teal-500/20'
+      algorithms: ['Minimax', 'MCTS UCT', 'Heuristic thế cờ'],
+      difficulty: 'Lập trình: Rất khó',
+      imageGlow: 'from-purple-500/20 to-cyan-500/20'
     },
     {
-      id: 'xiangqi',
-      name: 'XIANGQI / CỜ TƯỚNG',
-      vietnameseName: 'Cờ Tướng Trận Giả',
-      description: 'Đại chiến biên cương. Mô phỏng đường đi quân sĩ, tịnh hiểm hóc kết hợp cắt tỉa Alpha-Beta sâu.',
-      size: '9x10 Grid',
-      active: false,
-      algorithms: ['Piece-Square Tables', 'Minimax'],
-      difficulty: 'Sắp ra mắt',
-      imageGlow: 'from-blue-500/10 to-indigo-500/10'
+      id: 'soccer',
+      name: 'BÓNG ĐÁ AI 3D',
+      vietnameseName: 'Đấu Trường Bóng Đá',
+      description: 'Phòng đấu 3D rộng: hai AI tự học di chuyển, sút bóng riêng biệt (độ cao tùy vị trí bóng), nhảy cao né tránh & tranh bóng bổng có cooldown, va chạm cứng có phản lực và lưới vát gôn thực tế. AI tự học và giỏi dần qua các thế hệ.',
+      size: 'Sân 3D vát gôn',
+      active: true,
+      algorithms: ['Mạng nơ-ron', 'Tiến hóa di truyền', 'Nhảy cao & Dẫn bóng'],
+      difficulty: 'Lập trình: Rất khó',
+      imageGlow: 'from-violet-500/20 to-fuchsia-500/20'
+    },
+    {
+      id: 'tag',
+      name: 'ĐUỔI BẮT AI 3D',
+      vietnameseName: 'Đuổi Bắt 3D',
+      description: 'Phòng 3D kín với 4 trụ cột: AI đỏ (Chaser) tự học đuổi theo, AI xanh (Evader) tự học trốn tránh. Hai AI tiến hoá song song — đuổi bắt càng ngày càng trở nên khéo léo và căng thẳng hơn.',
+      size: 'Phòng 3D kín',
+      active: true,
+      algorithms: ['Mạng nơ-ron', 'Tiến hóa di truyền', 'Đối kháng cùng lúc'],
+      difficulty: 'Lập trình: Rất khó',
+      imageGlow: 'from-red-500/20 to-green-500/20'
     }
   ];
 
@@ -82,7 +127,7 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
         {games.map((game, idx) => (
           <div
             key={game.id}
-            onClick={game.active ? () => onSelectGame(game.id as 'caro' | 'racing' | 'football') : undefined}
+            onClick={game.active ? () => onSelectGame(game.id as 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag') : undefined}
             className={`glass-panel game-card relative overflow-hidden p-8 flex flex-col justify-between h-[340px] cursor-pointer ${
               game.active ? 'glow-border-purple' : 'opacity-70'
             }`}

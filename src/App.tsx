@@ -3,15 +3,19 @@ import SelectGameScreen from './components/SelectGameScreen';
 import SetupScreen from './components/SetupScreen';
 import TrainingScreen from './components/TrainingScreen';
 import RacingScreen from './components/RacingScreen';
-import FootballScreen from './components/FootballScreen';
-import { AIConfig, RacingConfig } from './types/game';
-import { FootballConfig } from './types/football';
+import FlappyScreen from './components/FlappyScreen';
+import Game2048Screen from './components/Game2048Screen';
+import QMazeScreen from './components/QMazeScreen';
+import Connect4Screen from './components/Connect4Screen';
+import Soccer2Screen from './components/Soccer2Screen';
+import TagScreen from './components/TagScreen';
+import { AIConfig, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, TagConfig } from './types/game';
 
-type Screen = 'select' | 'setup' | 'caro-arena' | 'racing-arena' | 'football-arena';
+type Screen = 'select' | 'setup' | 'caro-arena' | 'racing-arena' | 'flappy-arena' | '2048-arena' | 'qmaze-arena' | 'connect4-arena' | 'soccer-arena' | 'tag-arena';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('select');
-  const [gameType, setGameType] = useState<'caro' | 'racing' | 'football'>('caro');
+  const [gameType, setGameType] = useState<'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag'>('caro');
 
   // Caro configuration states
   const [configX, setConfigX] = useState<AIConfig | null>(null);
@@ -21,11 +25,26 @@ function App() {
   // Racing configuration state
   const [racingConfig, setRacingConfig] = useState<RacingConfig | null>(null);
 
-  // Football configuration state
-  const [footballConfig, setFootballConfig] = useState<FootballConfig | null>(null);
+  // Flappy Bird configuration state
+  const [flappyConfig, setFlappyConfig] = useState<FlappyConfig | null>(null);
+
+  // 2048 configuration state
+  const [game2048Config, setGame2048Config] = useState<Game2048Config | null>(null);
+
+  // Q-learning maze configuration state
+  const [qmazeConfig, setQmazeConfig] = useState<QMazeConfig | null>(null);
+
+  // Connect Four configuration state
+  const [connect4Config, setConnect4Config] = useState<Connect4Config | null>(null);
+
+  // Soccer configuration state
+  const [soccerConfig,  setSoccerConfig]  = useState<SoccerConfig  | null>(null);
+
+  // Tag game configuration state
+  const [tagConfig, setTagConfig] = useState<TagConfig | null>(null);
 
   // Navigation handlers
-  const handleSelectGame = (gameId: 'caro' | 'racing' | 'football') => {
+  const handleSelectGame = (gameId: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag') => {
     setGameType(gameId);
     setScreen('setup');
   };
@@ -45,9 +64,34 @@ function App() {
     setScreen('racing-arena');
   };
 
-  const handleLaunchFootball = (config: FootballConfig) => {
-    setFootballConfig(config);
-    setScreen('football-arena');
+  const handleLaunchFlappy = (config: FlappyConfig) => {
+    setFlappyConfig(config);
+    setScreen('flappy-arena');
+  };
+
+  const handleLaunch2048 = (config: Game2048Config) => {
+    setGame2048Config(config);
+    setScreen('2048-arena');
+  };
+
+  const handleLaunchQMaze = (config: QMazeConfig) => {
+    setQmazeConfig(config);
+    setScreen('qmaze-arena');
+  };
+
+  const handleLaunchConnect4 = (config: Connect4Config) => {
+    setConnect4Config(config);
+    setScreen('connect4-arena');
+  };
+
+  const handleLaunchSoccer = (config: SoccerConfig) => {
+    setSoccerConfig(config);
+    setScreen('soccer-arena');
+  };
+
+  const handleLaunchTag = (config: TagConfig) => {
+    setTagConfig(config);
+    setScreen('tag-arena');
   };
 
   return (
@@ -62,7 +106,12 @@ function App() {
           onBack={handleBackToSelect}
           onLaunchArena={handleLaunchCaroArena}
           onLaunchRacing={handleLaunchRacing}
-          onLaunchFootball={handleLaunchFootball}
+          onLaunchFlappy={handleLaunchFlappy}
+          onLaunch2048={handleLaunch2048}
+          onLaunchQMaze={handleLaunchQMaze}
+          onLaunchConnect4={handleLaunchConnect4}
+          onLaunchSoccer={handleLaunchSoccer}
+          onLaunchTag={handleLaunchTag}
         />
       )}
 
@@ -82,9 +131,44 @@ function App() {
         />
       )}
 
-      {screen === 'football-arena' && footballConfig && (
-        <FootballScreen
-          config={footballConfig}
+      {screen === 'flappy-arena' && flappyConfig && (
+        <FlappyScreen
+          config={flappyConfig}
+          onBack={handleBackToSetup}
+        />
+      )}
+
+      {screen === '2048-arena' && game2048Config && (
+        <Game2048Screen
+          config={game2048Config}
+          onBack={handleBackToSetup}
+        />
+      )}
+
+      {screen === 'qmaze-arena' && qmazeConfig && (
+        <QMazeScreen
+          config={qmazeConfig}
+          onBack={handleBackToSetup}
+        />
+      )}
+
+      {screen === 'connect4-arena' && connect4Config && (
+        <Connect4Screen
+          config={connect4Config}
+          onBack={handleBackToSetup}
+        />
+      )}
+
+      {screen === 'soccer-arena' && soccerConfig && (
+        <Soccer2Screen
+          config={soccerConfig}
+          onBack={handleBackToSetup}
+        />
+      )}
+
+      {screen === 'tag-arena' && tagConfig && (
+        <TagScreen
+          config={tagConfig}
           onBack={handleBackToSetup}
         />
       )}
