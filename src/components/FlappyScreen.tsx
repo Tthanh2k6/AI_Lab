@@ -567,7 +567,7 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
         </div>
 
         {/* Stat pills */}
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center stats-container-scrollable">
           <div className="stat-pill glass-panel px-3 py-1.5 flex items-center gap-2 border border-purple-500/10">
             <Hash className="w-3.5 h-3.5 text-purple-400" />
             <div>
@@ -608,7 +608,7 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 header-controls-container">
           <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800 rounded-lg p-1">
             <span className="text-[9px] font-mono text-slate-500 uppercase font-semibold pl-1.5">TỐC ĐỘ:</span>
             <div className="flex gap-0.5">

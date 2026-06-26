@@ -126,7 +126,7 @@ export default function TagScreen({ config, onBack }: Props) {
         </div>
 
         {/* Scoreboard */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 stats-container-scrollable">
           {/* KAI (Chaser) score */}
           <div className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 border"
             style={{ background: 'rgba(37,99,235,0.1)', borderColor: 'rgba(37,99,235,0.35)' }}>
@@ -178,7 +178,7 @@ export default function TagScreen({ config, onBack }: Props) {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 header-controls-container">
           <div className="flex items-center gap-1 bg-slate-900/60 border border-slate-800 rounded-lg p-1">
             <span className="text-[9px] font-mono text-slate-500 uppercase pl-1">TUA:</span>
             <div className="flex gap-0.5">
@@ -216,7 +216,7 @@ export default function TagScreen({ config, onBack }: Props) {
       </div>
 
       {/* Main content */}
-      <div style={{ display: 'flex', height: 'calc(100vh - 94px)', gap: 10, padding: 10, overflow: 'hidden', background: '#06070d' }}>
+      <div className="game-arena-container">
         {/* 3D Canvas */}
         <div ref={wrapRef} style={{
           flex: '1 1 0', minWidth: 0, height: '100%', position: 'relative',
@@ -226,9 +226,7 @@ export default function TagScreen({ config, onBack }: Props) {
         }} />
 
         {/* Side panel */}
-        <div className="glass-panel p-3 font-mono text-slate-300 scrollbar-styled"
-          style={{ width: 275, flexShrink: 0, height: '100%', overflowY: 'auto',
-            display: 'flex', flexDirection: 'column', gap: 9, fontSize: 11 }}>
+        <div className="glass-panel p-3 font-mono text-slate-300 scrollbar-styled game-sidebar">
 
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">

@@ -19,7 +19,7 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
     {
       id: 'flappy',
       name: 'FLAPPY BIRD',
-      vietnameseName: 'Chim Bay Né Ống',
+      vietnameseName: 'Flappy Bird',
       description: 'Đàn chim do AI điều khiển tự học vượt ống và giỏi dần qua từng thế hệ (mạng nơ-ron + tiến hóa di truyền). Có chế độ tự chơi.',
       size: 'Né chướng ngại',
       active: true,

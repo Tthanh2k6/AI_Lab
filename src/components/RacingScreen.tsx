@@ -1025,7 +1025,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           </div>
 
           {/* Quick Speed / Controller bar */}
-          <div className="glass-panel p-4 mt-4 w-full flex items-center justify-between gap-6">
+          <div className="glass-panel p-4 mt-4 w-full racing-controls-bar">
             <div className="flex gap-2">
               <button
                 onClick={togglePause}

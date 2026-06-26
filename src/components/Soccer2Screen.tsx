@@ -126,7 +126,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 stats-container-scrollable">
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-4 py-1.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]">
             <span className="text-2xl font-extrabold font-mono" style={{ color: '#ff7a18', textShadow: '0 0 12px rgba(255,122,24,.5)' }}>{stats.scoreOrange}</span>
             <span className="text-slate-600 font-bold">:</span>
@@ -148,7 +148,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 header-controls-container">
           <div className="flex items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-lg p-1">
             <span className="text-[9px] font-mono text-slate-500 uppercase font-semibold pl-1.5">TUA:</span>
             <div className="flex gap-0.5">
@@ -182,7 +182,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
         <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-[width] duration-200" style={{ width: `${timePct}%` }} />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 12, padding: 12, height: 'calc(100vh - 90px)', overflow: 'hidden', backgroundColor: '#06070d' }}>
+      <div className="game-arena-container">
         {/* Sân 3D */}
         <div
           ref={wrapRef}
@@ -200,10 +200,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
         />
 
         {/* Bảng thông tin */}
-        <div
-          className="glass-panel p-3 font-mono text-slate-300 scrollbar-styled"
-          style={{ width: 280, flexShrink: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, fontSize: 11 }}
-        >
+        <div className="glass-panel p-3 font-mono text-slate-300 scrollbar-styled game-sidebar">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
             <span className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-violet-400" /> BẢNG THÔNG SỐ AI

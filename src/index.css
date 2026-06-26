@@ -747,3 +747,160 @@ main {
 .t2048-appear { animation: t2048-appear 150ms ease-out; }
 .t2048-pop { animation: t2048-pop 160ms ease-out; }
 
+/* ==========================================================================
+   Mobile Responsiveness Styles & Overrides
+   ========================================================================== */
+
+/* Standard Responsive Utilities */
+.hidden {
+  display: none !important;
+}
+
+@media (min-width: 1024px) {
+  .lg\:flex {
+    display: flex !important;
+  }
+}
+
+@media (min-width: 640px) {
+  .sm\:flex-row {
+    flex-direction: row !important;
+  }
+  .sm\:inline {
+    display: inline !important;
+  }
+}
+
+/* Arena Grid Stack Reordering on Mobile */
+@media (max-width: 1200px) {
+  .arena-grid {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .arena-grid > div:nth-child(2) {
+    order: -1; /* Move center column (canvas) to the top of the stack */
+  }
+}
+
+/* Double slider responsive layout */
+@media (max-width: 500px) {
+  .double-slider-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+}
+
+/* Stats Cards Grid Layout on Mobile */
+@media (max-width: 600px) {
+  .sim-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Horizontally scrollable stats indicators on mobile */
+@media (max-width: 768px) {
+  .stats-container-scrollable {
+    width: 100% !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .stats-container-scrollable::-webkit-scrollbar {
+    display: none;
+  }
+  .stats-container-scrollable .stat-pill,
+  .stats-container-scrollable > div {
+    flex-shrink: 0 !important;
+  }
+}
+
+/* Responsive header controls */
+@media (max-width: 600px) {
+  .header-controls-container {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .header-controls-container > div:first-child {
+    grid-column: span 2 !important;
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+  .header-controls-container > button {
+    width: 100% !important;
+  }
+}
+
+/* Racing controls responsive panel */
+.racing-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .racing-controls-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  .racing-controls-bar > div:first-child {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .racing-controls-bar .cyber-btn {
+    width: 100% !important;
+  }
+  .racing-controls-bar > div:not(:first-child) {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+}
+
+/* 3D Games (Soccer, Tag) Arena layout */
+.game-arena-container {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px;
+  height: calc(100vh - 90px);
+  overflow: hidden;
+  background-color: #06070d;
+}
+
+.game-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 11px;
+}
+
+@media (max-width: 768px) {
+  .game-arena-container {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: calc(100vh - 90px) !important;
+  }
+  .game-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    flex-shrink: 1 !important;
+    overflow-y: visible !important;
+  }
+  .game-arena-container > div:first-child {
+    height: 350px !important;
+    flex: none !important;
+  }
+}
+

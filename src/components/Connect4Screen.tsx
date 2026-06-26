@@ -40,7 +40,10 @@ export default function Connect4Screen({ config, onBack }: Props) {
   const [colScores, setColScores] = useState<(number | null)[]>(new Array(COLS).fill(null));
 
   useEffect(() => {
-    const measure = () => setSize(Math.max(280, Math.min(520, Math.floor(window.innerHeight * 0.6))));
+    const measure = () => {
+      const maxW = window.innerWidth - 32;
+      setSize(Math.max(280, Math.min(maxW, 520, Math.floor(window.innerHeight * 0.55))));
+    };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
@@ -182,7 +185,7 @@ export default function Connect4Screen({ config, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center stats-container-scrollable">
           <div className="stat-pill glass-panel px-3 py-1.5 flex items-center gap-2 border border-red-500/10">
             <Trophy className="w-3.5 h-3.5 text-red-400" />
             <div>
@@ -205,7 +208,7 @@ export default function Connect4Screen({ config, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 header-controls-container">
           {!playerMode && (
             <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800 rounded-lg p-1">
               <span className="text-[9px] font-mono text-slate-500 uppercase font-semibold pl-1.5">TỐC ĐỘ:</span>

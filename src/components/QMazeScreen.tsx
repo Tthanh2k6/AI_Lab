@@ -26,7 +26,10 @@ export default function QMazeScreen({ config, onBack }: Props) {
   const [stats, setStats] = useState({ episode: 1, steps: 0, epsilon: 1, rate: 0, best: 0, optimal: mazeRef.current.optimal });
 
   useEffect(() => {
-    const measure = () => setPx(Math.max(300, Math.min(620, Math.floor(window.innerHeight * 0.66))));
+    const measure = () => {
+      const maxW = window.innerWidth - 32;
+      setPx(Math.max(280, Math.min(maxW, 620, Math.floor(window.innerHeight * 0.6))));
+    };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
@@ -87,7 +90,7 @@ export default function QMazeScreen({ config, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center stats-container-scrollable">
           <div className="stat-pill glass-panel px-3 py-1.5 flex items-center gap-2 border border-blue-500/10">
             <Hash className="w-3.5 h-3.5 text-blue-400" />
             <div>
@@ -118,7 +121,7 @@ export default function QMazeScreen({ config, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 header-controls-container">
           <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800 rounded-lg p-1">
             <span className="text-[9px] font-mono text-slate-500 uppercase font-semibold pl-1.5">TỐC ĐỘ:</span>
             <div className="flex gap-0.5">
