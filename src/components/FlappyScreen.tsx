@@ -649,11 +649,12 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
       </header>
 
       {/* CANVAS + panel bộ não */}
-      <div className="flex-grow flex items-stretch justify-center gap-4 p-4 overflow-hidden">
-        <div className="flex-1 flex items-center justify-center min-w-0">
+      <div className="flex-grow grid items-center overflow-hidden" style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', padding: 16, gap: 16 }}>
+        {/* Khung game — cột giữa, căn giữa màn hình */}
+        <div className="flex items-center justify-center" style={{ gridColumn: 2, gridRow: 1 }}>
         <div
           className="relative"
-          style={{ width: '100%', maxHeight: '100%', aspectRatio: `${FLAPPY.WIDTH} / ${FLAPPY.HEIGHT}` }}
+          style={{ width: 'min(680px, calc((100vh - 200px) * 1.6))', aspectRatio: `${FLAPPY.WIDTH} / ${FLAPPY.HEIGHT}` }}
         >
           <canvas
             ref={canvasRef}
@@ -687,8 +688,8 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
         </div>
         </div>
 
-        {/* Panel: bộ não AI (mạng nơ-ron) của chim dẫn đầu */}
-        <div className="hidden lg:flex flex-col gap-2 glass-panel p-3 w-[290px] shrink-0">
+        {/* Panel: bộ não AI (mạng nơ-ron) của chim dẫn đầu — cột trái phụ */}
+        <div className="hidden lg:flex flex-col gap-2 glass-panel p-3" style={{ width: 290, gridColumn: 1, gridRow: 1, justifySelf: 'start', overflow: 'hidden' }}>
           <span className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
             <Activity className="w-4 h-4" /> Bộ Não AI (chim dẫn đầu)
           </span>

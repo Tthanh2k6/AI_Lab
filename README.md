@@ -191,4 +191,4 @@ Dưới đây là danh sách các lệnh thực thi có sẵn trong `package.jso
 Dự án được xây dựng phục vụ cho mục đích học tập, nghiên cứu và trực quan hóa các thuật toán trí tuệ nhân tạo.
 
 *   **Phát triển bởi**: Trần Trung Thanh (Tthanh2k6)
-*   **Phiên bản**: v1.0.0
+*   **Phiên bản**: v1.5.11

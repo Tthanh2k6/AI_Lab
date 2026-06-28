@@ -153,16 +153,9 @@ export default function QMazeScreen({ config, onBack }: Props) {
         </div>
       </header>
 
-      <div className="flex-grow flex items-center justify-center gap-6 p-4 overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          width={px}
-          height={px}
-          className="rounded-xl border border-slate-700/50 shadow-2xl"
-          style={{ width: px, height: px, background: '#0b1220' }}
-        />
-        {/* Chú giải */}
-        <div className="hidden lg:flex flex-col gap-3 glass-panel p-4 w-56 text-[11px] font-mono text-slate-300">
+      <div className="flex-grow grid items-center overflow-hidden" style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', padding: 16, gap: 24 }}>
+        {/* Chú giải (cột trái phụ) */}
+        <div className="hidden lg:flex flex-col gap-3 glass-panel p-4 text-[11px] font-mono text-slate-300" style={{ width: 224, gridColumn: 1, justifySelf: 'start' }}>
           <span className="text-sm font-bold text-blue-400 uppercase tracking-wider">Chú giải</span>
           <div className="flex items-center gap-2"><span className="w-4 h-4 rounded bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span> Tác nhân (agent)</div>
           <div className="flex items-center gap-2"><span className="w-4 h-4 rounded bg-amber-400 flex items-center justify-center text-[10px] text-orange-900">★</span> Đích đến</div>
@@ -173,6 +166,17 @@ export default function QMazeScreen({ config, onBack }: Props) {
             <p className="mb-2"><b className="text-white">Mũi tên</b>: hành động tốt nhất đã học tại ô đó (chính sách).</p>
             <p>Agent dùng <b className="text-white">ε-greedy</b>: khám phá nhiều lúc đầu (ε cao) rồi khai thác dần. Xem heatmap & mũi tên hội tụ về đường ngắn nhất.</p>
           </div>
+        </div>
+
+        {/* Mê cung — chính diện, trung tâm */}
+        <div className="flex items-center justify-center" style={{ gridColumn: 2 }}>
+          <canvas
+            ref={canvasRef}
+            width={px}
+            height={px}
+            className="rounded-xl border border-slate-700/50 shadow-2xl"
+            style={{ width: px, height: px, background: '#0b1220' }}
+          />
         </div>
       </div>
     </div>

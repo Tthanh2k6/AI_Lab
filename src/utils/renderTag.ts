@@ -608,6 +608,9 @@ export class TagRenderer {
       if (spd > 0.05) {
         cm.group.rotation.y += spd * 0.04;
       }
+      // Hộp đang bị NẮM/KÉO → sáng rực để nhìn rõ
+      const held = i === w.chaser.grabbedCube || i === w.evader.grabbedCube;
+      (cm.body.material as THREE.MeshStandardMaterial).emissiveIntensity = held ? 1.15 : 0.45;
     }
 
     // ── Distance line ──

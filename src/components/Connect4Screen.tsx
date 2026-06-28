@@ -249,8 +249,9 @@ export default function Connect4Screen({ config, onBack }: Props) {
         </div>
       </header>
 
-      <div className="flex-grow flex items-center justify-center gap-6 p-4 overflow-hidden">
+      <div className="flex-grow grid items-center overflow-hidden" style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', padding: 16, gap: 24 }}>
         <C4ThinkPanel scores={colScores} />
+        <div className="flex items-center justify-center" style={{ gridColumn: 2 }}>
         <div className="flex flex-col items-center justify-center gap-3">
         <div className="text-sm font-mono font-bold h-5 text-white">
           {statusText || (playerMode ? 'Bạn cầm quân ĐỎ — bấm vào cột để thả' : 'Máy đấu máy (Minimax)')}
@@ -270,6 +271,7 @@ export default function Connect4Screen({ config, onBack }: Props) {
           </button>
         )}
         </div>
+        </div>
       </div>
     </div>
   );
@@ -284,7 +286,7 @@ function C4ThinkPanel({ scores }: { scores: (number | null)[] }) {
   let bestC = -1, bv = -Infinity;
   scores.forEach((v, c) => { if (v != null && v > bv) { bv = v; bestC = c; } });
   return (
-    <div className="hidden lg:flex flex-col gap-3 glass-panel p-4 w-60 shrink-0">
+    <div className="hidden lg:flex flex-col gap-3 glass-panel p-4" style={{ width: 240, gridColumn: 1, justifySelf: 'start' }}>
       <span className="text-sm font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
         <Cpu className="w-4 h-4" /> AI Đang Nghĩ
       </span>

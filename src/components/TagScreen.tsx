@@ -48,8 +48,7 @@ export default function TagScreen({ config, onBack }: Props) {
     const loop = () => {
       const w = worldRef.current;
       if (runningRef.current) {
-        const steps = speedRef.current;
-        for (let i = 0; i < steps; i++) stepTagWorld(w, mutRef.current);
+        stepTagWorld(w, mutRef.current, speedRef.current);
       }
       renderer.render(w);
       frameRef.current++;

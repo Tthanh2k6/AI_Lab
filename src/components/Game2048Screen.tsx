@@ -27,7 +27,7 @@ function AIThinkPanel({ scores }: { scores: DirScores }) {
   const span = max - min || 1;
   const best = bestDirFromScores(scores);
   return (
-    <div className="hidden lg:flex flex-col gap-3 glass-panel p-4 w-64 shrink-0">
+    <div className="hidden lg:flex flex-col gap-3 glass-panel p-4" style={{ width: 256, gridColumn: 1, justifySelf: 'start' }}>
       <span className="text-sm font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
         <Cpu className="w-4 h-4" /> AI Đang Nghĩ
       </span>
@@ -251,8 +251,9 @@ export default function Game2048Screen({ config, onBack }: Props) {
       </header>
 
       {/* BOARD + panel AI */}
-      <div className="flex-grow flex items-center justify-center gap-6 p-4 overflow-hidden">
+      <div className="flex-grow grid items-center overflow-hidden" style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', padding: 16, gap: 24 }}>
         <AIThinkPanel scores={aiScores} />
+        <div className="flex items-center justify-center" style={{ gridColumn: 2 }}>
         <div className="relative" style={{ width: boardSize, height: boardSize }}>
           <Board2048 tiles={tiles} size={boardSize} />
 
@@ -275,6 +276,7 @@ export default function Game2048Screen({ config, onBack }: Props) {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>

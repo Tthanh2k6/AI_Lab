@@ -1,5 +1,5 @@
 @echo off
-title AI Caro Arena Launcher
+title AI Arena Launcher
 cls
 echo ===================================================================
 echo     CHUONG TRINH KHOI CHAY NHANH DAU TRUONG AI (PC)
