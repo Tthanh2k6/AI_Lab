@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Play, Square, RefreshCw, Activity, Timer, Cpu, Target, Zap, Eye } from 'lucide-react';
+import { ArrowLeft, Play, Square, RefreshCw, Timer, Cpu, Target, Zap, Eye, EyeOff, LayoutGrid } from 'lucide-react';
 import { TagConfig } from '../types/game';
-import { createTagWorld, stepTagWorld, resetTagWorld, secondsLeftTag, TagWorld, TAG } from '../utils/tagGame';
+import { createTagWorld, stepTagWorld, resetTagWorld, setTagMap, secondsLeftTag, TagWorld, TAG, TAG_MAPS } from '../utils/tagGame';
 import { TagRenderer } from '../utils/renderTag';
 
 interface Props {
@@ -12,8 +12,9 @@ interface Props {
 const SPEEDS = [1, 2, 4, 8, 16, 50];
 
 export default function TagScreen({ config, onBack }: Props) {
+  const initialMapIdx = config.startMapIdx ?? 0;
   const wrapRef     = useRef<HTMLDivElement | null>(null);
-  const worldRef    = useRef<TagWorld>(createTagWorld());
+  const worldRef    = useRef<TagWorld>(createTagWorld(initialMapIdx));
   const rendererRef = useRef<TagRenderer | null>(null);
   const rafRef      = useRef<number | null>(null);
   const runningRef  = useRef(true);
@@ -23,9 +24,12 @@ export default function TagScreen({ config, onBack }: Props) {
 
   const [isRunning, setIsRunning] = useState(true);
   const [simSpeed,  setSimSpeed]  = useState(config.speed ?? 2);
+  const [mapIdx,    setMapIdx]    = useState(initialMapIdx);
+  const [showVision, setShowVision] = useState(config.showVision ?? true);
   const [stats, setStats] = useState({
     generation: 0,
-    time: Math.ceil(TAG.MATCH_TICKS / 60),
+    time: TAG_MAPS[initialMapIdx].durationSec,
+    maxTime: TAG_MAPS[initialMapIdx].durationSec,
     matchTagCount: 0,
     chaserWins: 0, evaderWins: 0,
     chaserFit: 0, evaderFit: 0,
@@ -43,6 +47,7 @@ export default function TagScreen({ config, onBack }: Props) {
     const cw = wrap.clientWidth  || 960;
     const ch = wrap.clientHeight || 600;
     const renderer = new TagRenderer(wrap, cw, ch);
+    renderer.setVision(config.showVision ?? true);
     rendererRef.current = renderer;
 
     const loop = () => {
@@ -58,6 +63,7 @@ export default function TagScreen({ config, onBack }: Props) {
         setStats({
           generation:    w.generation,
           time:          secondsLeftTag(w),
+          maxTime:       Math.ceil(w.matchTicks / 60),
           matchTagCount: w.matchTagCount,
           chaserWins:    w.chaserWins,
           evaderWins:    w.evaderWins,
@@ -97,8 +103,14 @@ export default function TagScreen({ config, onBack }: Props) {
   const toggleRun   = () => { runningRef.current = !runningRef.current; setIsRunning(runningRef.current); };
   const handleSpeed = (s: number) => { speedRef.current = s; setSimSpeed(s); };
   const handleReset = () => { resetTagWorld(worldRef.current); };
+  const handleMap   = (idx: number) => { setTagMap(worldRef.current, idx); setMapIdx(idx); };
+  const toggleVision = () => {
+    const next = !showVision;
+    setShowVision(next);
+    rendererRef.current?.setVision(next);
+  };
 
-  const timePct = (stats.time / Math.ceil(TAG.MATCH_TICKS / 60)) * 100;
+  const timePct = (stats.time / Math.max(1, stats.maxTime)) * 100;
   const tagPct  = (stats.matchTagCount / TAG.MAX_TAGS) * 100;
   const winTotal = stats.chaserWins + stats.evaderWins;
   const kaiWinRate = winTotal > 0 ? Math.round(stats.chaserWins / winTotal * 100) : 50;
@@ -151,27 +163,19 @@ export default function TagScreen({ config, onBack }: Props) {
           </div>
 
           {/* Tag progress */}
-          <div className="flex items-center gap-1.5 bg-slate-900/60 border border-amber-500/20 rounded-lg px-2.5 py-1">
+          <div className="flex items-center gap-1.5 bg-slate-800/80 border border-amber-500/50 rounded-lg px-2.5 py-1 shadow-[0_0_10px_rgba(251,191,36,0.15)]">
             <Zap className="w-3.5 h-3.5 text-amber-400" />
             <div>
-              <span className="text-[8px] text-slate-500 block leading-none font-semibold uppercase">BẮT ĐỰC</span>
-              <span className="text-sm font-bold text-amber-400 font-mono">{stats.matchTagCount}/{TAG.MAX_TAGS}</span>
+              <span className="text-[8px] text-slate-300 block leading-none font-bold uppercase tracking-wide">BẮT ĐỰC</span>
+              <span className="text-base font-extrabold text-amber-300 font-mono" style={{ textShadow: '0 0 8px rgba(251,191,36,.5)' }}>{stats.matchTagCount}/{TAG.MAX_TAGS}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-lg px-2.5 py-1">
-            <Timer className="w-3.5 h-3.5 text-slate-300" />
+          <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-600 rounded-lg px-2.5 py-1 shadow-[0_0_10px_rgba(148,163,184,0.12)]">
+            <Timer className="w-3.5 h-3.5 text-slate-200" />
             <div>
-              <span className="text-[8px] text-slate-500 block leading-none font-semibold uppercase">CÒN</span>
-              <span className="text-sm font-bold text-white font-mono">{stats.time}s</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-900/60 border border-indigo-500/20 rounded-lg px-2.5 py-1">
-            <Activity className="w-3.5 h-3.5 text-indigo-400" />
-            <div>
-              <span className="text-[8px] text-slate-500 block leading-none font-semibold uppercase">THẾ HỆ</span>
-              <span className="text-sm font-bold text-indigo-400 font-mono">#{stats.generation}</span>
+              <span className="text-[8px] text-slate-300 block leading-none font-bold uppercase tracking-wide">CÒN</span>
+              <span className="text-base font-extrabold text-white font-mono" style={{ textShadow: '0 0 8px rgba(255,255,255,.4)' }}>{stats.time}s</span>
             </div>
           </div>
         </div>
@@ -212,6 +216,35 @@ export default function TagScreen({ config, onBack }: Props) {
       <div className="h-0.5 w-full bg-slate-900">
         <div className="h-full bg-gradient-to-r from-red-600 to-amber-400 transition-[width] duration-100"
           style={{ width: `${tagPct}%` }} />
+      </div>
+
+      {/* Map selector + vision toggle */}
+      <div className="flex items-center gap-2 px-5 py-2 border-b border-slate-800 flex-wrap"
+        style={{ background: 'rgba(10,14,28,0.85)' }}>
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mr-1">
+          <LayoutGrid className="w-3.5 h-3.5 text-blue-400" /> PHÒNG:
+        </span>
+        <div className="flex gap-1 flex-wrap">
+          {TAG_MAPS.map((m, i) => (
+            <button key={m.id} onClick={() => handleMap(i)} title={m.desc}
+              className={`px-2.5 py-1 text-[10px] font-mono rounded-md transition-all font-bold border ${
+                mapIdx === i
+                  ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_10px_rgba(37,99,235,0.5)]'
+                  : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:text-white hover:border-slate-500'
+              }`}>
+              {m.name} <span className="opacity-60">· {m.durationSec}s</span>
+            </button>
+          ))}
+        </div>
+        <button onClick={toggleVision}
+          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono rounded-md transition-all font-bold border ${
+            showVision
+              ? 'bg-emerald-600/80 text-white border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+              : 'bg-slate-800/60 text-slate-400 border-slate-700 hover:text-white'
+          }`}>
+          {showVision ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          TẦM NHÌN AI {showVision ? 'BẬT' : 'TẮT'}
+        </button>
       </div>
 
       {/* Main content */}
@@ -373,10 +406,11 @@ export default function TagScreen({ config, onBack }: Props) {
             </summary>
             <div className="p-3 leading-relaxed text-slate-400 border-t border-slate-800 flex flex-col gap-2 text-[10px]">
               <p><b className="text-blue-400">KAI (xanh)</b> = Chaser — tự học đuổi Albert. Bắt đủ <b className="text-amber-400">{TAG.MAX_TAGS} lần</b> → thắng ván.</p>
-              <p><b className="text-white">ALBERT (trắng)</b> = Evader — tự học trốn Kai. Sống đủ <b className="text-amber-400">60s</b> → thắng ván.</p>
-              <p>Mỗi AI có <b className="text-indigo-400">8 tia raycast</b> (mắt nhìn) phát hiện tường, hộp, và đối thủ.</p>
-              <p><b className="text-purple-400">5 hộp màu</b> trong phòng là chướng ngại — AI học cách đẩy chúng để chặn/trốn.</p>
-              <p>Cả hai có thể <b className="text-emerald-400">nhảy</b> (cooldown {TAG.JUMP_COOLDOWN} tick).</p>
+              <p><b className="text-white">ALBERT (cam)</b> = Evader — tự học trốn Kai. Sống hết giờ phòng → thắng ván.</p>
+              <p><b className="text-indigo-400">{TAG_MAPS.length} phòng</b> bố cục khác nhau (hộp / tường chắn / cột trụ...) & thời lượng riêng. Đổi phòng <b className="text-white">giữ nguyên não</b> — AI train tiếp trên não cũ.</p>
+              <p>Mỗi AI có <b className="text-indigo-400">8 tia nhìn</b> (raycast). Nút <b className="text-emerald-400">TẦM NHÌN AI</b> bật/tắt: <span className="text-slate-300">xám</span>=tường, <span className="text-green-400">xanh lá</span>=hộp, <span className="text-rose-400">đỏ</span>=đã thấy đối thủ.</p>
+              <p>Hộp = chướng ngại. <b className="text-white">ALBERT</b> được <b className="text-emerald-400">kéo & đẩy</b> hộp; <b className="text-blue-400">KAI</b> chỉ được <b className="text-emerald-400">đẩy</b>. ALBERT được <b className="text-amber-400">thưởng lần đầu nắm hộp</b> để học cách tận dụng hộp.</p>
+              <p>Cả hai có thể <b className="text-emerald-400">nhảy</b> (cooldown {TAG.JUMP_COOLDOWN} tick) và <b className="text-emerald-400">đứng lên nóc hộp</b> để né/quan sát.</p>
               <p>Tiến hóa: não tốt nhất được giữ lại, não kém bị đột biến ngẫu nhiên.</p>
             </div>
           </details>

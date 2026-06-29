@@ -155,4 +155,6 @@ export interface Soccer2Config {
 export interface TagConfig {
   mutationRate: number; // tỉ lệ đột biến (0..1)
   speed: number;        // số tick mô phỏng mỗi frame
+  startMapIdx?: number; // phòng khởi đầu (chỉ số trong TAG_MAPS)
+  showVision?: boolean; // bật tầm nhìn (raycast) ngay từ đầu
 }

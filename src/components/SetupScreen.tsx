@@ -4,11 +4,54 @@ import { AIConfig, AIAlgorithm, RacingConfig, FlappyConfig, Game2048Config, QMaz
 import { getZeroWeights } from '../utils/trainer';
 import { getPresetTrack, generateRandomTrack } from '../utils/racingPhysics';
 import { FLAPPY, FlappyPipe, createPopulation, stepWorld, heuristicFlap } from '../utils/flappy';
+import { TAG, TAG_MAPS } from '../utils/tagGame';
 import Game2048Preview from './Game2048Preview';
 import QMazePreview from './QMazePreview';
 import Connect4Preview from './Connect4Preview';
 import SoccerPreview from './SoccerPreview';
 import TrackBuilder from './TrackBuilder';
+
+// Bản đồ nhìn-từ-trên của phòng Đuổi bắt đang chọn (hộp + tường + điểm xuất phát).
+const TAG_CUBE_COLORS = ['#e74c3c', '#3498db', '#f39c12', '#2ecc71', '#9b59b6'];
+function TagMapPreview({ mapIdx, size = 420 }: { mapIdx: number; size?: number }) {
+  const map = TAG_MAPS[mapIdx] ?? TAG_MAPS[0];
+  const L = TAG.LENGTH, W = TAG.WIDTH;
+  const h = (size * W) / L;
+  const sx = (x: number) => ((x + L / 2) / L) * size;
+  const sy = (y: number) => ((y + W / 2) / W) * h;
+  const ss = (v: number) => (v / L) * size;
+  const cs = ss(TAG.CUBE_SIZE);
+  const spawn = (L / 2 - 20) * 0.65; // khớp spawnPos initial
+  return (
+    <svg width={size} height={h} viewBox={`0 0 ${size} ${h}`}
+      className="max-w-full border border-slate-800 rounded-xl shadow-2xl" style={{ background: '#0b1120' }}>
+      {/* lưới */}
+      {Array.from({ length: 11 }).map((_, i) => (
+        <line key={`v${i}`} x1={(size / 10) * i} y1={0} x2={(size / 10) * i} y2={h} stroke="#1e293b" strokeWidth={1} />
+      ))}
+      {Array.from({ length: 8 }).map((_, i) => (
+        <line key={`hh${i}`} x1={0} y1={(h / 7) * i} x2={size} y2={(h / 7) * i} stroke="#1e293b" strokeWidth={1} />
+      ))}
+      {/* viền sân */}
+      <rect x={1} y={1} width={size - 2} height={h - 2} fill="none" stroke="#6366f1" strokeWidth={2} opacity={0.6} />
+      {/* tường */}
+      {map.walls.map((wl, i) => (
+        <rect key={`w${i}`} x={sx(wl.x - wl.w / 2)} y={sy(wl.y - wl.h / 2)} width={ss(wl.w)} height={ss(wl.h)}
+          fill="#475569" stroke="#93c5fd" strokeWidth={1.5} rx={2} />
+      ))}
+      {/* hộp */}
+      {map.cubes.map((c, i) => (
+        <rect key={`c${i}`} x={sx(c.x) - cs / 2} y={sy(c.y) - cs / 2} width={cs} height={cs}
+          fill={TAG_CUBE_COLORS[i % TAG_CUBE_COLORS.length]} opacity={0.9} rx={2} />
+      ))}
+      {/* điểm xuất phát */}
+      <circle cx={sx(-spawn)} cy={sy(0)} r={ss(5)} fill="#3b82f6" />
+      <circle cx={sx(spawn)} cy={sy(0)} r={ss(5)} fill="#f97316" />
+      <text x={sx(-spawn)} y={sy(0) - ss(8)} fill="#60a5fa" fontSize={11} fontFamily="monospace" textAnchor="middle">KAI</text>
+      <text x={sx(spawn)} y={sy(0) - ss(8)} fill="#fb923c" fontSize={11} fontFamily="monospace" textAnchor="middle">ALBERT</text>
+    </svg>
+  );
+}
 
 interface SetupScreenProps {
   gameType: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag';
@@ -67,6 +110,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
   // Tag game Config state
   const [tagMutation, setTagMutation] = useState<number>(0.12);
   const [tagSpeed, setTagSpeed] = useState<number>(2);
+  const [tagMapIdx, setTagMapIdx] = useState<number>(0);
+  const [tagVision, setTagVision] = useState<boolean>(true);
 
   // Canvas ref for the lightweight looping simulator on the left
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -604,7 +649,7 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
     }
 
     if (gameType === 'tag') {
-      onLaunchTag({ mutationRate: tagMutation, speed: tagSpeed });
+      onLaunchTag({ mutationRate: tagMutation, speed: tagSpeed, startMapIdx: tagMapIdx, showVision: tagVision });
       return;
     }
 
@@ -698,7 +743,7 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
               ) : gameType === 'soccer' ? (
                 <SoccerPreview size={420} mutationRate={soccerMutation} />
               ) : gameType === 'tag' ? (
-                <SoccerPreview size={420} mutationRate={tagMutation} />
+                <TagMapPreview mapIdx={tagMapIdx} size={420} />
               ) : (
                 <canvas
                   ref={canvasRef}
@@ -840,7 +885,7 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                   </div>
                   <div className="sim-stat-card">
                     <span className="text-[10px] text-amber-400 block mb-1">PHÒNG 3D</span>
-                    <span className="text-sm font-bold text-amber-400">4 trụ cột</span>
+                    <span className="text-sm font-bold text-amber-400">{TAG_MAPS.length} phòng</span>
                   </div>
                 </div>
               ) : (
@@ -1448,7 +1493,7 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                     />
                   </div>
 
-                  <div className="setting-slider-group">
+                  <div className="setting-slider-group mb-4">
                     <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
                       <span>Tốc Độ Tua Học (tick/khung):</span>
                       <span className="text-cyan-400 font-bold">{tagSpeed}×</span>
@@ -1460,14 +1505,56 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                       className="slider-styled slider-styled-cyan"
                     />
                   </div>
+
+                  {/* Chọn phòng khởi đầu */}
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-2">
+                      <span>Phòng Khởi Đầu:</span>
+                      <span className="text-blue-400 font-bold">{TAG_MAPS[tagMapIdx].durationSec}s / ván</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TAG_MAPS.map((m, i) => (
+                        <button
+                          key={m.id} type="button" title={m.desc}
+                          onClick={() => setTagMapIdx(i)}
+                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md font-bold border transition-all ${
+                            tagMapIdx === i
+                              ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_10px_rgba(37,99,235,0.4)]'
+                              : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:text-white hover:border-slate-500'
+                          }`}
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono mt-2 leading-relaxed">{TAG_MAPS[tagMapIdx].desc}</p>
+                  </div>
+
+                  {/* Tầm nhìn AI */}
+                  <div className="setting-slider-group">
+                    <button
+                      type="button"
+                      onClick={() => setTagVision(v => !v)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-md font-mono text-[11px] font-bold border transition-all ${
+                        tagVision
+                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-slate-800/60 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      <span>Hiển Thị Tầm Nhìn AI (raycast):</span>
+                      <span className={`px-2 py-0.5 rounded ${tagVision ? 'bg-emerald-500/30 text-emerald-200' : 'bg-slate-700 text-slate-400'}`}>
+                        {tagVision ? 'BẬT' : 'TẮT'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
-                  <span className="text-red-400">AI Chaser (đỏ)</span> tự học cách đuổi bắt,{' '}
-                  <span className="text-green-400">AI Evader (xanh)</span> tự học cách trốn. Cả hai tiến hóa song song — Chaser bắt đủ{' '}
-                  <span className="text-amber-300">5 lần</span> thì thắng ván, hết{' '}
-                  <span className="text-amber-300">60 giây</span> chưa bắt đủ thì Evader thắng.
-                  4 trụ cột trong phòng tạo thêm <span className="text-white">chiến thuật</span>.
+                  <span className="text-blue-400">KAI (xanh)</span> tự học đuổi bắt,{' '}
+                  <span className="text-orange-400">ALBERT (cam)</span> tự học trốn. Tiến hóa song song — KAI bắt được{' '}
+                  <span className="text-amber-300">1 lần</span> là thắng ván; ALBERT sống hết giờ phòng thì thắng.{' '}
+                  <span className="text-white">{TAG_MAPS.length} phòng</span> bố cục & thời lượng khác nhau (hộp kéo/đẩy · tường chắn · cột trụ), có thể{' '}
+                  <span className="text-white">nhảy lên nóc hộp</span> để né. Đổi phòng trong trận giữ nguyên não đã học.
                 </p>
               </div>
             )}

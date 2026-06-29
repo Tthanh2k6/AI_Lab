@@ -21,15 +21,15 @@ export const TAG = {
   PLAYER_R:     3.5,
   PLAYER_H:     8.0,
   MAX_SPEED:    1.0,     // dùng để CHUẨN HOÁ observation
-  CHASER_SPEED: 0.84,    // KAI (đuổi) chậm hơn một chút
-  EVADER_SPEED: 0.99,    // tốc độ CƠ SỞ của ALBERT (trận hiển thị tự điều chỉnh quanh mức này)
+  CHASER_SPEED: 0.60,    // KAI (đuổi) — đã GIẢM TỐC cho dễ quan sát
+  EVADER_SPEED: 0.71,    // tốc độ CƠ SỞ của ALBERT — đã GIẢM TỐC (trận hiển thị tự điều chỉnh quanh mức này)
   FRICTION:     0.86,
 
   JUMP_FORCE:   1.8,
   GRAVITY:      0.055,
   JUMP_COOLDOWN: 120,
 
-  CUBE_SIZE:    14.0,    // hộp cản TO — dùng làm chướng ngại/chiến thuật
+  CUBE_SIZE:    18.0,    // hộp cản TO hơn — dùng làm chướng ngại/chiến thuật
   NUM_CUBES:    5,
   CUBE_FRICTION: 0.93,   // trượt lâu hơn → người chạy đẩy/kéo đi dễ hơn
   CUBE_RESTITUTION: 0.35,
@@ -38,7 +38,8 @@ export const TAG = {
   TAG_DIST:     6.0,     // phải đứng RẤT sát mới bắt được (mặt phẳng X,Y)
   TAG_Z:        6.0,     // VÀ chênh lệch độ cao phải nhỏ — đang nhảy cao thì THOÁT
   TAG_COOLDOWN: 80,
-  GRAB_DIST:    16.0,    // tầm với để CHỦ ĐỘNG nắm/kéo hộp
+  GRAB_DIST:    18.0,    // tầm với để CHỦ ĐỘNG nắm/kéo hộp (theo size hộp lớn hơn)
+  GRAB_FIRST_REWARD: 60, // thưởng MỘT LẦN khi ALBERT lần đầu nắm hộp — bootstrap học dùng hộp (giống video)
 
   NUM_RAYS:     8,
   RAY_LENGTH:   90,
@@ -67,6 +68,23 @@ export interface TagCube {
   colorHex: number;
 }
 
+// Tường chắn cố định trong phòng (AABB) — không đẩy được, chặn người & hộp & tia nhìn.
+export interface TagWall {
+  x: number; y: number;   // tâm
+  w: number; h: number;   // bề rộng theo X, bề dày theo Y
+}
+
+// Một "phòng" (map) như trong video — bố cục hộp/tường + thời lượng riêng.
+export interface TagMap {
+  id: string;
+  name: string;
+  durationSec: number;
+  hasGrab: boolean;                                   // có hộp kéo/đẩy không
+  cubes: { x: number; y: number; size?: number }[];
+  walls: TagWall[];
+  desc: string;
+}
+
 export interface TagPlayer {
   role: 'chaser' | 'evader';
   brain: NeuralNetworkType;
@@ -83,6 +101,7 @@ export interface TagPlayer {
   jumpIntent: boolean;
   grabbedCube: number;   // chỉ số hộp đang giữ (-1 = không giữ)
   grabOffX: number; grabOffY: number; // vị trí hộp so với người khi giữ
+  hasGrabbed: boolean;   // đã từng nắm hộp trong ván này chưa (để thưởng 1 lần)
   maxSpeed: number;      // tốc độ tối đa hiệu dụng (cho phép handicap cân bằng động)
   heuristic?: 'chase' | 'flee'; // bot luật-cứng (để bootstrap huấn luyện), bỏ trống = dùng mạng
 }
@@ -94,6 +113,8 @@ interface Match {
   chaser: TagPlayer;
   evader: TagPlayer;
   cubes: TagCube[];
+  walls: TagWall[];
+  matchTicks: number;     // thời lượng ván (theo map đang chơi)
   tick: number;
   matchTagCount: number;
   tagFlashTicks: number; tagFlashX: number; tagFlashY: number;
@@ -109,6 +130,9 @@ export interface TagWorld {
   chaser: TagPlayer;
   evader: TagPlayer;
   cubes: TagCube[];
+  walls: TagWall[];
+  matchTicks: number;
+  mapIdx: number;
   tick: number;
   matchTagCount: number;
   tagFlashTicks: number; tagFlashX: number; tagFlashY: number;
@@ -139,16 +163,73 @@ export interface TagWorld {
 
 const CUBE_COLORS = [0xe74c3c, 0x3498db, 0xf39c12, 0x2ecc71, 0x9b59b6];
 
-function makeCubes(): TagCube[] {
-  const positions = [
-    { x:   0, y:   0 },
-    { x: -50, y: -25 }, { x:  50, y: -25 },
-    { x: -50, y:  25 }, { x:  50, y:  25 },
-  ];
-  return positions.map((p, i) => ({
+// ─── Các phòng (maps) ─────────────────────────────────────────────────────────
+// 4 phòng theo video AlbertKai + 2 phòng tự thiết kế. Đổi map giữ nguyên não
+// (huấn luyện tiếp trên não cũ — giống cách tác giả train chồng lên phòng trước).
+export const TAG_MAPS: TagMap[] = [
+  {
+    id: 'p1', name: 'Phòng 1 · Khởi đầu', durationSec: 12, hasGrab: false,
+    desc: 'Phòng trống — chỉ học đuổi & trốn. Không có hộp, không có tường.',
+    cubes: [], walls: [],
+  },
+  {
+    id: 'p2', name: 'Phòng 2 · Hộp', durationSec: 15, hasGrab: true,
+    desc: 'Thêm 5 hộp. ALBERT được kéo/đẩy hộp để chặn; KAI chỉ đẩy.',
+    cubes: [
+      { x: 0, y: 0 },
+      { x: -50, y: -25 }, { x: 50, y: -25 },
+      { x: -50, y: 25 }, { x: 50, y: 25 },
+    ],
+    walls: [],
+  },
+  {
+    id: 'p3', name: 'Phòng 3 · Tường chắn', durationSec: 20, hasGrab: true,
+    desc: 'Tường chắn dọc giữa phòng (có khe hở 2 đầu) + 3 hộp.',
+    cubes: [ { x: -45, y: -22 }, { x: 45, y: 22 }, { x: 0, y: -40 } ],
+    walls: [ { x: 0, y: 0, w: 8, h: 74 } ],
+  },
+  {
+    id: 'final', name: 'Trận cuối · Song tường', durationSec: 25, hasGrab: true,
+    desc: 'Hai tường lệch tạo lối zig-zag + 5 hộp. Phức tạp nhất.',
+    cubes: [
+      { x: 0, y: 0 },
+      { x: -70, y: -28 }, { x: 70, y: -28 },
+      { x: -70, y: 28 }, { x: 70, y: 28 },
+    ],
+    walls: [
+      { x: -35, y: 0, w: 8, h: 56 },
+      { x: 35, y: 0, w: 8, h: 56 },
+    ],
+  },
+  {
+    id: 'pillars', name: 'Cột trụ', durationSec: 18, hasGrab: true,
+    desc: '4 cột trụ vuông ở 4 góc trong + 2 hộp — luồn lách quanh trụ.',
+    cubes: [ { x: 0, y: -30 }, { x: 0, y: 30 } ],
+    walls: [
+      { x: -45, y: -26, w: 16, h: 16 }, { x: 45, y: -26, w: 16, h: 16 },
+      { x: -45, y: 26, w: 16, h: 16 }, { x: 45, y: 26, w: 16, h: 16 },
+    ],
+  },
+  {
+    id: 'corridor', name: 'Hành lang', durationSec: 22, hasGrab: true,
+    desc: 'Hai vách dài lệch nhau tạo hành lang chữ S + 2 hộp.',
+    cubes: [ { x: -75, y: 0 }, { x: 75, y: 0 } ],
+    walls: [
+      { x: -22, y: 20, w: 116, h: 8 },
+      { x: 22, y: -20, w: 116, h: 8 },
+    ],
+  },
+];
+
+function makeCubes(map: TagMap): TagCube[] {
+  return map.cubes.map((p, i) => ({
     x: p.x, y: p.y, vx: 0, vy: 0,
-    size: TAG.CUBE_SIZE, colorHex: CUBE_COLORS[i],
+    size: p.size ?? TAG.CUBE_SIZE, colorHex: CUBE_COLORS[i % CUBE_COLORS.length],
   }));
+}
+
+function cloneWalls(map: TagMap): TagWall[] {
+  return map.walls.map(wl => ({ ...wl }));
 }
 
 function spawnPos(role: 'chaser' | 'evader', initial = false): { x: number; y: number } {
@@ -171,17 +252,18 @@ function makePlayer(role: 'chaser' | 'evader', brain: NeuralNetworkType, randomi
     fitness: 0, bestFitness: 0, generation: 0,
     tagCount: 0, tagCooldown: 0, jumpCooldown: 0,
     isGrounded: true, jumpIntent: false,
-    grabbedCube: -1, grabOffX: 0, grabOffY: 0,
+    grabbedCube: -1, grabOffX: 0, grabOffY: 0, hasGrabbed: false,
     maxSpeed: role === 'chaser' ? TAG.CHASER_SPEED : TAG.EVADER_SPEED,
   };
 }
 
-function newMatch(chaserBrain: NeuralNetworkType, evaderBrain: NeuralNetworkType, randomize: boolean): Match {
+function newMatch(map: TagMap, chaserBrain: NeuralNetworkType, evaderBrain: NeuralNetworkType, randomize: boolean): Match {
   const chaser = makePlayer('chaser', chaserBrain, randomize);
   const evader = makePlayer('evader', evaderBrain, randomize);
   const dx = chaser.x - evader.x, dy = chaser.y - evader.y;
   return {
-    chaser, evader, cubes: makeCubes(),
+    chaser, evader, cubes: makeCubes(map), walls: cloneWalls(map),
+    matchTicks: map.durationSec * 60,
     tick: 0, matchTagCount: 0,
     tagFlashTicks: 0, tagFlashX: 0, tagFlashY: 0,
     lastTagTick: 0, avgDist: 100,
@@ -211,14 +293,16 @@ function makePop(): Genome[] {
   return pop;
 }
 
-export function createTagWorld(): TagWorld {
+export function createTagWorld(mapIdx = 0): TagWorld {
+  const map = TAG_MAPS[mapIdx] ?? TAG_MAPS[0];
   const chaserPop = makePop();
   const evaderPop = makePop();
   const bestChaserBrain = NeuralNetwork.copy(chaserPop[0].brain);
   const bestEvaderBrain = NeuralNetwork.copy(evaderPop[0].brain);
-  const disp = newMatch(bestChaserBrain, bestEvaderBrain, false);
+  const disp = newMatch(map, bestChaserBrain, bestEvaderBrain, false);
   const w: TagWorld = {
     chaser: disp.chaser, evader: disp.evader, cubes: disp.cubes,
+    walls: disp.walls, matchTicks: disp.matchTicks, mapIdx,
     tick: 0, matchTagCount: 0,
     tagFlashTicks: 0, tagFlashX: 0, tagFlashY: 0,
     resetDelayTicks: 0, avgChaserDist: 100, lastTagTick: 0,
@@ -232,15 +316,27 @@ export function createTagWorld(): TagWorld {
 }
 
 export function resetTagWorld(w: TagWorld) {
-  const fresh = createTagWorld();
+  const fresh = createTagWorld(w.mapIdx);
   Object.assign(w, fresh);
+}
+
+// Đổi sang phòng khác NHƯNG GIỮ NGUYÊN não đã học (train tiếp trên não cũ).
+// Chỉ thay bố cục (hộp/tường), thời lượng và mở ván hiển thị mới.
+export function setTagMap(w: TagWorld, mapIdx: number) {
+  if (mapIdx === w.mapIdx) return;
+  const map = TAG_MAPS[mapIdx] ?? TAG_MAPS[0];
+  w.mapIdx = mapIdx;
+  w.disp = newMatch(map, w.bestChaserBrain, w.bestEvaderBrain, true);
+  w.disp.evader.maxSpeed = TAG.EVADER_SPEED * w.balanceAdj;
+  w.resetDelayTicks = 0;
+  mirror(w);
 }
 
 // ─── Raycast ─────────────────────────────────────────────────────────────────
 
 interface RayHit { dist: number; type: 0 | 1 | 2 }
 
-function castRay(ox: number, oy: number, angle: number, cubes: TagCube[], opp: { x: number; y: number }, oppR: number): RayHit {
+function castRay(ox: number, oy: number, angle: number, cubes: TagCube[], walls: TagWall[], opp: { x: number; y: number }, oppR: number): RayHit {
   const maxD = TAG.RAY_LENGTH as number;
   const dx = Math.cos(angle), dy = Math.sin(angle);
   const eps = 1e-5;
@@ -253,15 +349,25 @@ function castRay(ox: number, oy: number, angle: number, cubes: TagCube[], opp: {
   if (dy < -eps) wallD = Math.min(wallD, (-hw - oy) / dy);
   let hitD = Math.max(0, wallD);
   let hitType: 0 | 1 | 2 = 0;
+  const idx = Math.abs(dx) > eps ? dx : eps;
+  const idy = Math.abs(dy) > eps ? dy : eps;
+  // Hộp (moveableObject) → type 1
   for (const cube of cubes) {
     const hs = cube.size / 2;
-    const tx1 = (cube.x - hs - ox) / (Math.abs(dx) > eps ? dx : eps);
-    const tx2 = (cube.x + hs - ox) / (Math.abs(dx) > eps ? dx : eps);
-    const ty1 = (cube.y - hs - oy) / (Math.abs(dy) > eps ? dy : eps);
-    const ty2 = (cube.y + hs - oy) / (Math.abs(dy) > eps ? dy : eps);
+    const tx1 = (cube.x - hs - ox) / idx, tx2 = (cube.x + hs - ox) / idx;
+    const ty1 = (cube.y - hs - oy) / idy, ty2 = (cube.y + hs - oy) / idy;
     const tNear = Math.max(Math.min(tx1, tx2), Math.min(ty1, ty2));
     const tFar  = Math.min(Math.max(tx1, tx2), Math.max(ty1, ty2));
     if (tFar > 0 && tNear < tFar && tNear < hitD) { hitD = Math.max(0, tNear); hitType = 1; }
+  }
+  // Tường cố định (wall) → type 0
+  for (const wl of walls) {
+    const hwx = wl.w / 2, hwy = wl.h / 2;
+    const tx1 = (wl.x - hwx - ox) / idx, tx2 = (wl.x + hwx - ox) / idx;
+    const ty1 = (wl.y - hwy - oy) / idy, ty2 = (wl.y + hwy - oy) / idy;
+    const tNear = Math.max(Math.min(tx1, tx2), Math.min(ty1, ty2));
+    const tFar  = Math.min(Math.max(tx1, tx2), Math.max(ty1, ty2));
+    if (tFar > 0 && tNear < tFar && tNear < hitD) { hitD = Math.max(0, tNear); hitType = 0; }
   }
   const ex = opp.x - ox, ey = opp.y - oy;
   const t  = ex * dx + ey * dy;
@@ -272,14 +378,14 @@ function castRay(ox: number, oy: number, angle: number, cubes: TagCube[], opp: {
   return { dist: hitD / maxD, type: hitType };
 }
 
-function buildInputs(self: TagPlayer, opp: TagPlayer, cubes: TagCube[]): number[] {
+function buildInputs(self: TagPlayer, opp: TagPlayer, cubes: TagCube[], walls: TagWall[]): number[] {
   const dx = opp.x - self.x, dy = opp.y - self.y;
   const hl = TAG.LENGTH / 2, hw = TAG.WIDTH / 2;
   const inputs: number[] = [];
   const facing = Math.atan2(dy, dx);
   for (let i = 0; i < TAG.NUM_RAYS; i++) {
     const angle = facing + (i / TAG.NUM_RAYS) * Math.PI * 2;
-    inputs.push(castRay(self.x, self.y, angle, cubes, opp, TAG.PLAYER_R).dist);
+    inputs.push(castRay(self.x, self.y, angle, cubes, walls, opp, TAG.PLAYER_R).dist);
   }
   const dist = Math.sqrt(dx * dx + dy * dy) + 0.001;
   inputs.push(Math.min(dist / 150, 1));
@@ -317,12 +423,16 @@ function nearestCubeIdx(p: TagPlayer, cubes: TagCube[], exclude: number) {
 }
 
 // Cập nhật trạng thái nắm hộp theo lệnh `grab` của mạng.
+// LUẬT: chỉ NGƯỜI CHẠY (evader) mới được nắm/kéo hộp. NGƯỜI ĐUỔI (chaser) chỉ ĐẨY.
 function updateGrab(p: TagPlayer, opp: TagPlayer, cubes: TagCube[], grab: boolean) {
+  if (p.role === 'chaser') { p.grabbedCube = -1; return; } // KAI (đuổi) không được kéo/nắm hộp
   if (!grab) { p.grabbedCube = -1; return; }              // không ra lệnh → thả
   if (p.grabbedCube < 0) {                                // chưa giữ → thử nắm hộp gần nhất trong tầm với
     const n = nearestCubeIdx(p, cubes, opp.grabbedCube);  // không cướp hộp đối thủ đang giữ
     if (n.idx >= 0 && n.dist < TAG.GRAB_DIST) {
       p.grabbedCube = n.idx;
+      // Thưởng MỘT LẦN cho lần đầu nắm được hộp — bootstrap để AI bắt đầu dùng hộp (giống video).
+      if (!p.hasGrabbed) { p.fitness += TAG.GRAB_FIRST_REWARD; p.hasGrabbed = true; }
       const hold = TAG.PLAYER_R + cubes[n.idx].size / 2 + 1.5;
       const ol = Math.sqrt(n.dx * n.dx + n.dy * n.dy) || 1;
       p.grabOffX = (n.dx / ol) * hold;                    // giữ hộp ở cạnh, đúng phía vừa với tới
@@ -348,7 +458,24 @@ function carryHeldCube(p: TagPlayer, cubes: TagCube[]) {
 
 // ─── Physics ─────────────────────────────────────────────────────────────────
 
-function applyPlayerMove(p: TagPlayer, mx: number, my: number, jump: boolean) {
+// Mặt sàn đỡ chân của người: sàn phòng (0) hoặc NÓC HỘP nếu người đang ở
+// phía trên một hộp (đứng/đáp lên trên). Nóc hộp cao = cube.size (body tâm ở size/2).
+const STAND_TOL = 2.0;   // dung sai để "bắt" được nóc hộp khi rơi xuống
+function supportFloor(p: TagPlayer, cubes: TagCube[]): number {
+  let floor = 0;
+  for (const cube of cubes) {
+    const reach = cube.size / 2 + TAG.PLAYER_R;
+    if (Math.abs(p.x - cube.x) < reach && Math.abs(p.y - cube.y) < reach) {
+      const top = cube.size;
+      // Chỉ được đỡ bởi NÓC hộp khi đang ở trên/ngang nóc (đáp xuống) —
+      // không phải khi đâm NGANG vào thân hộp (lúc đó để pushCube xử lý).
+      if (p.z >= top - STAND_TOL && top > floor) floor = top;
+    }
+  }
+  return floor;
+}
+
+function applyPlayerMove(p: TagPlayer, mx: number, my: number, jump: boolean, cubes: TagCube[]) {
   const maxSpd = p.maxSpeed;
   const accel = maxSpd * (1 - TAG.FRICTION) * 1.6;
   p.vx = p.vx * TAG.FRICTION + mx * accel;
@@ -363,7 +490,9 @@ function applyPlayerMove(p: TagPlayer, mx: number, my: number, jump: boolean) {
   if (p.jumpCooldown > 0) p.jumpCooldown--;
 
   p.vz -= TAG.GRAVITY; p.z += p.vz;
-  if (p.z <= 0) { p.z = 0; p.vz = 0; p.isGrounded = true; }
+  const floor = supportFloor(p, cubes);   // có thể đứng/đáp lên NÓC hộp
+  if (p.z <= floor) { p.z = floor; p.vz = 0; p.isGrounded = true; }
+  else { p.isGrounded = false; }
   p.x += p.vx; p.y += p.vy;
 }
 
@@ -376,7 +505,29 @@ function clampToRoom(p: TagPlayer) {
   if (p.y >  hw) { p.y =  hw; p.vy *= -0.4; }
 }
 
+// Người va tường cố định (AABB) → đẩy ra theo trục cạn hơn.
+function collidePlayerWall(p: TagPlayer, wl: TagWall) {
+  const hx = wl.w / 2 + TAG.PLAYER_R, hy = wl.h / 2 + TAG.PLAYER_R;
+  const dx = p.x - wl.x, dy = p.y - wl.y;
+  if (Math.abs(dx) >= hx || Math.abs(dy) >= hy) return;
+  const px = hx - Math.abs(dx), py = hy - Math.abs(dy);
+  if (px < py) { p.x = wl.x + (dx >= 0 ? hx : -hx); p.vx *= -0.3; }
+  else         { p.y = wl.y + (dy >= 0 ? hy : -hy); p.vy *= -0.3; }
+}
+
+// Hộp va tường cố định (AABB).
+function collideCubeWall(cube: TagCube, wl: TagWall) {
+  const hx = wl.w / 2 + cube.size / 2, hy = wl.h / 2 + cube.size / 2;
+  const dx = cube.x - wl.x, dy = cube.y - wl.y;
+  if (Math.abs(dx) >= hx || Math.abs(dy) >= hy) return;
+  const px = hx - Math.abs(dx), py = hy - Math.abs(dy);
+  if (px < py) { cube.x = wl.x + (dx >= 0 ? hx : -hx); cube.vx *= -0.5; }
+  else         { cube.y = wl.y + (dy >= 0 ? hy : -hy); cube.vy *= -0.5; }
+}
+
 function pushCube(p: TagPlayer, cube: TagCube) {
+  // Đang đứng TRÊN nóc hộp này → chỉ tựa lên trên, không đẩy ngang.
+  if (p.z >= cube.size - STAND_TOL) return;
   const hs = cube.size / 2 + TAG.PLAYER_R;
   const dx = p.x - cube.x, dy = p.y - cube.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -422,7 +573,7 @@ function cubeCubeCollision(a: TagCube, b: TagCube) {
 
 // ─── 1 tick của một ván (dùng chung hiển thị + đánh giá) ──────────────────────
 
-function aiStep(self: TagPlayer, opp: TagPlayer, cubes: TagCube[]) {
+function aiStep(self: TagPlayer, opp: TagPlayer, cubes: TagCube[], walls: TagWall[]) {
   if (self.tagCooldown > 0) self.tagCooldown--;
   let mx: number, my: number, jump = false, grab = false;
 
@@ -439,28 +590,29 @@ function aiStep(self: TagPlayer, opp: TagPlayer, cubes: TagCube[]) {
     }
     mx = ddx; my = ddy;
   } else {
-    const raw = NeuralNetwork.feedForward(self.brain, buildInputs(self, opp, cubes));
+    const raw = NeuralNetwork.feedForward(self.brain, buildInputs(self, opp, cubes, walls));
     mx = Math.tanh(isNaN(raw[0]) ? 0 : raw[0]);
     my = Math.tanh(isNaN(raw[1]) ? 0 : raw[1]);
     jump = (isNaN(raw[2]) ? 0 : raw[2]) > 0.75;
     grab = (isNaN(raw[3]) ? 0 : raw[3]) > 0.5;
   }
 
-  applyPlayerMove(self, mx, my, jump);
+  applyPlayerMove(self, mx, my, jump, cubes);
   updateGrab(self, opp, cubes, grab);
 }
 
 function tickMatch(m: Match) {
-  const { chaser, evader, cubes } = m;
+  const { chaser, evader, cubes, walls } = m;
 
-  aiStep(chaser, evader, cubes);
-  aiStep(evader, chaser, cubes);
+  aiStep(chaser, evader, cubes, walls);
+  aiStep(evader, chaser, cubes, walls);
 
   if (isNaN(chaser.x) || isNaN(chaser.y)) { const p = spawnPos('chaser', false); chaser.x = p.x; chaser.y = p.y; chaser.z = 0; chaser.vx = chaser.vy = chaser.vz = 0; }
   if (isNaN(evader.x) || isNaN(evader.y)) { const p = spawnPos('evader', false); evader.x = p.x; evader.y = p.y; evader.z = 0; evader.vx = evader.vy = evader.vz = 0; }
 
   clampToRoom(chaser);
   clampToRoom(evader);
+  for (const wl of walls) { collidePlayerWall(chaser, wl); collidePlayerWall(evader, wl); }
 
   const isHeld = (i: number) => i === chaser.grabbedCube || i === evader.grabbedCube;
   for (let i = 0; i < cubes.length; i++) if (!isHeld(i)) stepCube(cubes[i]);
@@ -468,6 +620,7 @@ function tickMatch(m: Match) {
   for (let i = 0; i < cubes.length; i++) {
     if (isHeld(i)) continue;                 // hộp đang bị giữ thì không bị "đẩy" — nó dính theo người
     pushCube(chaser, cubes[i]); pushCube(evader, cubes[i]);
+    for (const wl of walls) collideCubeWall(cubes[i], wl);
   }
   // Kéo hộp đang giữ theo người (chạy sau cùng → vị trí hộp giữ là chuẩn)
   carryHeldCube(chaser, cubes);
@@ -515,17 +668,18 @@ function tickMatch(m: Match) {
 
   if (m.tagFlashTicks > 0) m.tagFlashTicks--;
   m.tick++;
-  if (m.tick >= TAG.MATCH_TICKS) { m.done = true; m.winner = 'evader'; evader.fitness += 120; }
+  if (m.tick >= m.matchTicks) { m.done = true; m.winner = 'evader'; evader.fitness += 120; }
 }
 
 // ─── Đánh giá headless 1 cá thể ───────────────────────────────────────────────
 
 // Chạy 1 ván đánh giá headless. `*Heur` != null → bên đó là bot luật-cứng.
 function runEval(
+  map: TagMap,
   chaserBrain: NeuralNetworkType, evaderBrain: NeuralNetworkType,
   chaserHeur: 'chase' | null, evaderHeur: 'flee' | null,
 ): Match {
-  const m = newMatch(chaserBrain, evaderBrain, true);
+  const m = newMatch(map, chaserBrain, evaderBrain, true);
   if (chaserHeur) m.chaser.heuristic = chaserHeur;
   if (evaderHeur) m.evader.heuristic = evaderHeur;
   for (let t = 0; t < TAG.EVAL_TICKS && !m.done; t++) tickMatch(m);
@@ -534,18 +688,19 @@ function runEval(
 
 function trainOneIndividual(w: TagWorld, mutationRate: number) {
   const i = w.evalIdx;
+  const map = TAG_MAPS[w.mapIdx] ?? TAG_MAPS[0];
   const cBrain = w.chaserPop[i].brain;
   const eBrain = w.evaderPop[i].brain;
 
   // Mỗi cá thể đấu 2 đối thủ: (a) nhà vô địch đối phương, (b) BOT luật-cứng.
   // Bot là mục tiêu học ổn định → chống "disengagement" (một bên áp đảo khiến
   // bên kia mất tín hiệu học). Nhờ vậy ALBERT luôn học được cách trốn.
-  const cVsBest = runEval(cBrain, w.bestEvaderBrain, null, null).chaser.fitness;
-  const cVsBot  = runEval(cBrain, w.bestEvaderBrain, null, 'flee').chaser.fitness;
+  const cVsBest = runEval(map, cBrain, w.bestEvaderBrain, null, null).chaser.fitness;
+  const cVsBot  = runEval(map, cBrain, w.bestEvaderBrain, null, 'flee').chaser.fitness;
   w.chaserPop[i].fit = (cVsBest + cVsBot) / 2;
 
-  const eVsBest = runEval(w.bestChaserBrain, eBrain, null, null).evader.fitness;
-  const eVsBot  = runEval(w.bestChaserBrain, eBrain, 'chase', null).evader.fitness;
+  const eVsBest = runEval(map, w.bestChaserBrain, eBrain, null, null).evader.fitness;
+  const eVsBot  = runEval(map, w.bestChaserBrain, eBrain, 'chase', null).evader.fitness;
   w.evaderPop[i].fit = (eVsBest + eVsBot) / 2;
   w.evalIdx++;
 
@@ -571,6 +726,7 @@ function trainOneIndividual(w: TagWorld, mutationRate: number) {
 function mirror(w: TagWorld) {
   const d = w.disp;
   w.chaser = d.chaser; w.evader = d.evader; w.cubes = d.cubes;
+  w.walls = d.walls; w.matchTicks = d.matchTicks;
   w.tick = d.tick; w.matchTagCount = d.matchTagCount;
   w.tagFlashTicks = d.tagFlashTicks; w.tagFlashX = d.tagFlashX; w.tagFlashY = d.tagFlashY;
   w.avgChaserDist = d.avgDist; w.lastTagTick = d.lastTagTick;
@@ -603,7 +759,7 @@ export function stepTagWorld(w: TagWorld, mutationRate: number, speed = 1) {
     w.resetDelayTicks--;
     if (w.disp.tagFlashTicks > 0) w.disp.tagFlashTicks--;
     if (w.resetDelayTicks === 0) {
-      w.disp = newMatch(w.bestChaserBrain, w.bestEvaderBrain, true);
+      w.disp = newMatch(TAG_MAPS[w.mapIdx] ?? TAG_MAPS[0], w.bestChaserBrain, w.bestEvaderBrain, true);
       w.disp.evader.maxSpeed = TAG.EVADER_SPEED * w.balanceAdj; // áp handicap cân bằng
     }
     mirror(w);
@@ -629,12 +785,28 @@ export function stepTagWorld(w: TagWorld, mutationRate: number, speed = 1) {
 }
 
 export function secondsLeftTag(w: TagWorld): number {
-  return Math.max(0, Math.ceil((TAG.MATCH_TICKS - w.tick) / 60));
+  return Math.max(0, Math.ceil((w.matchTicks - w.tick) / 60));
+}
+
+// Tia nhìn (raycast) của một người — dùng cho hiển thị "tầm nhìn AI".
+// Trả về đoạn thẳng từ mắt người tới điểm trúng + loại vật trúng (0 tường, 1 hộp, 2 đối thủ).
+export interface VisionRay { x1: number; y1: number; x2: number; y2: number; type: 0 | 1 | 2 }
+export function computeVision(self: TagPlayer, opp: TagPlayer, cubes: TagCube[], walls: TagWall[]): VisionRay[] {
+  const dx = opp.x - self.x, dy = opp.y - self.y;
+  const facing = Math.atan2(dy, dx);
+  const out: VisionRay[] = [];
+  for (let i = 0; i < TAG.NUM_RAYS; i++) {
+    const angle = facing + (i / TAG.NUM_RAYS) * Math.PI * 2;
+    const hit = castRay(self.x, self.y, angle, cubes, walls, opp, TAG.PLAYER_R);
+    const d = hit.dist * TAG.RAY_LENGTH;
+    out.push({ x1: self.x, y1: self.y, x2: self.x + Math.cos(angle) * d, y2: self.y + Math.sin(angle) * d, type: hit.type });
+  }
+  return out;
 }
 
 // Chỉ dùng cho kiểm thử cân bằng: chạy 1 ván best-vs-best (không huấn luyện).
 export function simulateBestMatch(w: TagWorld, evaderSpeedMul = 1): 'chaser' | 'evader' {
-  const m = newMatch(w.bestChaserBrain, w.bestEvaderBrain, true);
+  const m = newMatch(TAG_MAPS[w.mapIdx] ?? TAG_MAPS[0], w.bestChaserBrain, w.bestEvaderBrain, true);
   m.evader.maxSpeed = TAG.EVADER_SPEED * evaderSpeedMul;
   while (!m.done) tickMatch(m);
   return m.winner ?? 'evader';

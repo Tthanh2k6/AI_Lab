@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TAG, TagWorld, TagCube, TagPlayer } from './tagGame';
+import { TAG, TagWorld, TagCube, TagPlayer, computeVision, VisionRay } from './tagGame';
 
 // ============================================================================
 // TAG RENDERER v2 — Phong cách Albert/Kai
@@ -22,6 +22,7 @@ interface Board {
   ctx: CanvasRenderingContext2D;
   tex: THREE.CanvasTexture;
   last: string;
+  cw: number; ch: number;   // độ phân giải canvas (px) — dùng để vẽ theo tỉ lệ
 }
 
 interface CubeMesh {
@@ -49,10 +50,18 @@ export class TagRenderer {
   // Cubes
   private cubeMeshes: CubeMesh[] = [];
 
+  // Tường cố định (dựng lại khi đổi map)
+  private wallMeshes: THREE.Object3D[] = [];
+  private wallKey = '';
+
+  // Tầm nhìn AI (raycast) — 8 tia/người, bật/tắt được
+  private visionLinesC: THREE.Line[] = [];
+  private visionLinesE: THREE.Line[] = [];
+  private showVision = true;
+
   // UI Boards
   private timerBoard!: Board;
   private tagBoard!:   Board;
-  private genBoard!:   Board;
 
   // Effects
   private flashRing!:  THREE.Mesh;
@@ -112,6 +121,7 @@ export class TagRenderer {
     this._buildEffects();
     this._buildBoards();
     this._buildDistLine();
+    this._buildVision();
   }
 
   // ─── Lights ─────────────────────────────────────────────────────────────────
@@ -421,40 +431,141 @@ export class TagRenderer {
     const bz = -TAG.WIDTH / 2 + 0.5;
     this.timerBoard = this._makeBoard(24, 9, 0, 68, bz);
     this.tagBoard   = this._makeBoard(22, 8, 0, 56, bz);
-    this.genBoard   = this._makeBoard(18, 6, 0, 46, bz);
+  }
+
+  // ─── Tầm nhìn (raycast) ────────────────────────────────────────────────────
+
+  private _buildVisionSet(): THREE.Line[] {
+    const lines: THREE.Line[] = [];
+    for (let i = 0; i < TAG.NUM_RAYS; i++) {
+      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      const mat = new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.5 });
+      const line = new THREE.Line(geo, mat);
+      line.visible = this.showVision;
+      line.renderOrder = 2;
+      this.scene.add(line);
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  private _buildVision() {
+    this.visionLinesC = this._buildVisionSet();
+    this.visionLinesE = this._buildVisionSet();
+  }
+
+  setVision(on: boolean) { this.showVision = on; }
+
+  private _updateVisionSet(lines: THREE.Line[], rays: VisionRay[]) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      line.visible = this.showVision;
+      if (!this.showVision || !rays[i]) continue;
+      const r = rays[i];
+      const pos = line.geometry.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(0, r.x1, 4, r.y1);   // physics (x,y) → three (x, , z)
+      pos.setXYZ(1, r.x2, 4, r.y2);
+      pos.needsUpdate = true;
+      const mat = line.material as THREE.LineBasicMaterial;
+      // 0 tường = xám, 1 hộp = xanh lá, 2 đối thủ = đỏ (đã thấy mục tiêu)
+      mat.color.setHex(r.type === 2 ? 0xf43f5e : r.type === 1 ? 0x22c55e : 0x64748b);
+      mat.opacity = r.type === 2 ? 0.95 : r.type === 1 ? 0.7 : 0.45;
+    }
+  }
+
+  private _syncVision(w: TagWorld) {
+    if (!this.showVision) {
+      for (const l of this.visionLinesC) l.visible = false;
+      for (const l of this.visionLinesE) l.visible = false;
+      return;
+    }
+    this._updateVisionSet(this.visionLinesC, computeVision(w.chaser, w.evader, w.cubes, w.walls));
+    this._updateVisionSet(this.visionLinesE, computeVision(w.evader, w.chaser, w.cubes, w.walls));
+  }
+
+  // ─── Tường cố định (dựng lại khi map đổi) ──────────────────────────────────
+
+  private _syncWalls(w: TagWorld) {
+    const key = w.walls.map(wl => `${wl.x},${wl.y},${wl.w},${wl.h}`).join('|');
+    if (key === this.wallKey) return;
+    this.wallKey = key;
+    for (const m of this.wallMeshes) {
+      this.scene.remove(m);
+      const mesh = m as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach(x => x.dispose()); else if (mat) mat.dispose();
+    }
+    this.wallMeshes = [];
+    const H = 30;
+    for (const wl of w.walls) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x475569, roughness: 0.8, metalness: 0.1, emissive: 0x1e293b, emissiveIntensity: 0.4,
+      });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(wl.w, H, wl.h), mat);
+      mesh.position.set(wl.x, H / 2, wl.y);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      this.wallMeshes.push(mesh);
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(wl.w, H, wl.h)),
+        new THREE.LineBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.5 })
+      );
+      edges.position.copy(mesh.position);
+      this.scene.add(edges);
+      this.wallMeshes.push(edges);
+    }
   }
 
   private _makeBoard(wm: number, hm: number, x: number, y: number, z: number): Board {
     const c = document.createElement('canvas');
-    c.width = 256; c.height = 128;
+    // Phân giải cao + ĐÚNG tỉ lệ tấm bảng → chữ sắc nét, không bị kéo méo/mờ.
+    const DPI = 48; // px / mét
+    c.width  = Math.round(wm * DPI);
+    c.height = Math.round(hm * DPI);
     const ctx = c.getContext('2d')!;
     const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(wm, hm),
-      new THREE.MeshBasicMaterial({ map: tex })
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true })
     );
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
-    return { ctx, tex, last: '' };
+    return { ctx, tex, last: '', cw: c.width, ch: c.height };
   }
 
-  private _drawBoard(b: Board, lines: { text: string; color: string; size: number; y: number }[], bg = '#1e293b') {
+  // lines: vị trí & cỡ chữ tính theo TỈ LỆ chiều cao bảng (yFrac, sizeFrac ∈ 0..1).
+  private _drawBoard(b: Board, lines: { text: string; color: string; sizeFrac: number; yFrac: number }[], bg = '#0a0f1c') {
     const key = lines.map(l => l.text).join('|');
     if (b.last === key) return;
     b.last = key;
-    const { ctx } = b;
+    const { ctx, cw, ch } = b;
+    ctx.clearRect(0, 0, cw, ch);
+    // Nền tối đậm, tương phản cao → chữ nổi rõ (trước bị mờ).
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 256, 128);
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, 252, 124);
+    ctx.fillRect(0, 0, cw, ch);
+    // Viền sáng kép cho dễ thấy ở xa.
+    const bw = Math.max(4, ch * 0.05);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = bw;
+    ctx.strokeRect(bw / 2, bw / 2, cw - bw, ch - bw);
+    ctx.strokeStyle = 'rgba(147,197,253,0.5)';
+    ctx.lineWidth = bw * 0.4;
+    ctx.strokeRect(bw * 1.4, bw * 1.4, cw - bw * 2.8, ch - bw * 2.8);
     for (const line of lines) {
+      // Đổ bóng phát sáng quanh chữ để tăng độ rõ.
+      ctx.shadowColor = line.color;
+      ctx.shadowBlur = ch * 0.08;
       ctx.fillStyle = line.color;
-      ctx.font = `bold ${line.size}px "JetBrains Mono", monospace`;
+      ctx.font = `bold ${Math.round(line.sizeFrac * ch)}px "JetBrains Mono", monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(line.text, 128, line.y);
+      ctx.fillText(line.text, cw / 2, line.yFrac * ch);
     }
+    ctx.shadowBlur = 0;
     b.tex.needsUpdate = true;
   }
 
@@ -543,6 +654,10 @@ export class TagRenderer {
     if (this.disposed) return;
     this.frameN++;
 
+    // ── Tường + tầm nhìn (đổi theo map) ──
+    this._syncWalls(w);
+    this._syncVision(w);
+
     // ── Players ──
     this._lerpGroup(this.chaserGroup, w.chaser.x, w.chaser.y, w.chaser.z);
     this._lerpGroup(this.evaderGroup, w.evader.x, w.evader.y, w.evader.z);
@@ -593,10 +708,14 @@ export class TagRenderer {
     // Evader glow turns redder when danger
     eGlow.color.setHSL(0.05 - danger * 0.05, 1, 0.5);
 
-    // ── Cubes ──
-    for (let i = 0; i < this.cubeMeshes.length && i < w.cubes.length; i++) {
+    // ── Cubes ── (số hộp thay đổi theo map → ẩn các mesh thừa)
+    for (let i = 0; i < this.cubeMeshes.length; i++) {
+      const cm = this.cubeMeshes[i];
+      const exists = i < w.cubes.length;
+      cm.group.visible = exists;
+      cm.shadow.visible = exists;
+      if (!exists) continue;
       const cube = w.cubes[i];
-      const cm   = this.cubeMeshes[i];
       const P = 0.32;
       cm.group.position.x += (cube.x - cm.group.position.x) * P;
       cm.group.position.z += (cube.y - cm.group.position.z) * P;
@@ -652,19 +771,16 @@ export class TagRenderer {
     this._updateParticles();
 
     // ── Boards ──
-    const secs = Math.max(0, Math.ceil((TAG.MATCH_TICKS - w.tick) / 60));
+    const secs = Math.max(0, Math.ceil((w.matchTicks - w.tick) / 60));
     const mm   = Math.floor(secs / 60);
     const ss   = secs % 60;
     const timeStr = `${mm}:${String(ss).padStart(2, '0')}`;
     this._drawBoard(this.timerBoard, [
-      { text: `⏱  ${timeStr}`, color: '#ffffff', size: 52, y: 64 },
+      { text: `⏱  ${timeStr}`, color: '#ffffff', sizeFrac: 0.46, yFrac: 0.5 },
     ]);
     this._drawBoard(this.tagBoard, [
-      { text: `🔴 BẮT: ${w.matchTagCount} / ${TAG.MAX_TAGS}`, color: '#fbbf24', size: 36, y: 45 },
-      { text: `🏆 KAI ${w.chaserWins}  :  ${w.evaderWins} ALBERT`, color: '#94a3b8', size: 22, y: 95 },
-    ]);
-    this._drawBoard(this.genBoard, [
-      { text: `THẾ HỆ  #${w.generation}`, color: '#818cf8', size: 34, y: 64 },
+      { text: `🔴 BẮT: ${w.matchTagCount} / ${TAG.MAX_TAGS}`, color: '#fcd34d', sizeFrac: 0.30, yFrac: 0.34 },
+      { text: `🏆 KAI ${w.chaserWins}  :  ${w.evaderWins} ALBERT`, color: '#e2e8f0', sizeFrac: 0.20, yFrac: 0.72 },
     ]);
 
     this.renderer.render(this.scene, this.camera);
