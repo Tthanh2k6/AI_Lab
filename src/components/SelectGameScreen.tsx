@@ -13,7 +13,7 @@ interface GameCard {
   imageGlow: string;
 }
 
-export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (gameId: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag') => void }) {
+export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (gameId: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag' | 'cellwar') => void }) {
   // Sắp xếp theo ĐỘ KHÓ LẬP TRÌNH tăng dần (dễ → khó)
   const games: GameCard[] = [
     {
@@ -103,6 +103,17 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
       algorithms: ['Mạng nơ-ron', 'Tiến hóa di truyền', 'Đối kháng cùng lúc'],
       difficulty: 'Lập trình: Rất khó',
       imageGlow: 'from-red-500/20 to-green-500/20'
+    },
+    {
+      id: 'cellwar',
+      name: 'CELL WAR',
+      vietnameseName: 'Chiến Tranh Lãnh Thổ',
+      description: 'Nhiều phe AI tranh giành bản đồ ô vuông theo kiểu Territorial.io: chiếm đất, sinh quân và đẩy quân qua biên giới để bành trướng. Mỗi phe theo một chiến thuật riêng — xem chiến thuật nào thống trị và nuốt trọn bản đồ.',
+      size: 'Bản đồ ô lưới',
+      active: true,
+      algorithms: ['Chiến thuật heuristic', 'Tự động ô (CA)', 'Đa phe đối kháng'],
+      difficulty: 'Lập trình: Khó',
+      imageGlow: 'from-emerald-500/20 to-cyan-500/20'
     }
   ];
 
@@ -127,7 +138,7 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
         {games.map((game, idx) => (
           <div
             key={game.id}
-            onClick={game.active ? () => onSelectGame(game.id as 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag') : undefined}
+            onClick={game.active ? () => onSelectGame(game.id as 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag' | 'cellwar') : undefined}
             className={`glass-panel game-card relative overflow-hidden p-8 flex flex-col justify-between h-[340px] cursor-pointer ${
               game.active ? 'glow-border-purple' : 'opacity-70'
             }`}

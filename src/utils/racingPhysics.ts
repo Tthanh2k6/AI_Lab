@@ -1,4 +1,4 @@
-import { Point, Line, NeuralNetworkType, NetworkLayer } from '../types/game';
+import { Point, Line, NeuralNetworkType, NetworkLayer, TrackTheme } from '../types/game';
 
 // ============================================================================
 // NEURAL NETWORK MATH & FUNCTIONS
@@ -148,15 +148,43 @@ export interface RacingTrack {
   startPoint: Point;
   startAngle: number;
   width: number;
+
+  // ── Metadata do bộ sinh thủ tục gắn vào (xem utils/trackGen.ts) ──
+  /** Seed đã tạo ra map này — cùng seed luôn ra cùng map */
+  seed?: number;
+  /** Seed dạng base36 để hiển thị/chia sẻ */
+  seedLabel?: string;
+  /** Độ khó địa hình 1..5 */
+  difficulty?: number;
+  /** Biome & bảng màu */
+  theme?: TrackTheme;
+  /** Lưới ô đã dùng để đặt block đường đua */
+  grid?: { cols: number; rows: number; cell: number; usedCells: number; originX: number; originY: number };
+  /** Thống kê các loại block tạo nên đường đua */
+  blocks?: { straight: number; sweep: number; medium: number; hairpin: number; longestStraight: number };
+  /** Bề rộng lòng đường tại từng điểm centerLine (khác nhau theo noise) */
+  widths?: number[];
+  /** Chu vi đường đua (px) */
+  lengthPx?: number;
+  /** Bán kính cua gắt nhất (px) */
+  minRadius?: number;
 }
 
-// Helper to compute boundaries from a center line path
-export function buildTrackBoundaries(centerLine: Point[], width: number, isClosed = true): { leftWall: Line[]; rightWall: Line[]; checkpoints: Line[] } {
+/**
+ * Dựng tường trái/phải và checkpoint từ đường tim.
+ * `width` nhận số (bề rộng đều) hoặc mảng cùng độ dài centerLine (bề rộng biến thiên).
+ */
+export function buildTrackBoundaries(centerLine: Point[], width: number | number[], isClosed = true): { leftWall: Line[]; rightWall: Line[]; checkpoints: Line[] } {
   const checkpoints: Line[] = [];
   const leftPoints: Point[] = [];
   const rightPoints: Point[] = [];
 
   const n = centerLine.length;
+  // Bề rộng tại điểm i — hằng số hoặc tra mảng
+  const widthAt = Array.isArray(width)
+    ? (i: number) => width[i] ?? width[width.length - 1]
+    : () => width;
+
   for (let i = 0; i < n; i++) {
     const curr = centerLine[i];
 
@@ -191,7 +219,7 @@ export function buildTrackBoundaries(centerLine: Point[], width: number, isClose
     const nx = -uy;
     const ny = ux;
 
-    const halfW = width / 2;
+    const halfW = widthAt(i) / 2;
     const lp = { x: curr.x + nx * halfW, y: curr.y + ny * halfW };
     const rp = { x: curr.x - nx * halfW, y: curr.y - ny * halfW };
 
@@ -248,13 +276,13 @@ export function buildTrackBoundaries(centerLine: Point[], width: number, isClose
 
     // 3. Inside road check (encroaching another section's drivable lane)
     if (!crosses) {
-      const halfW = width / 2;
       for (let k = 0; k < n; k++) {
-        const idxDist = isClosed 
-          ? Math.min(Math.abs(i - k), n - Math.abs(i - k)) 
+        const idxDist = isClosed
+          ? Math.min(Math.abs(i - k), n - Math.abs(i - k))
           : Math.abs(i - k);
         if (idxDist < skipIndexRange) continue;
-        
+
+        const halfW = widthAt(k) / 2;
         const d1 = distancePointToPoint(rawLeft[i].p1, centerLine[k]);
         const d2 = distancePointToPoint(rawLeft[i].p2, centerLine[k]);
         // If either endpoint is inside the track width of another section, it's encroaching
@@ -296,13 +324,13 @@ export function buildTrackBoundaries(centerLine: Point[], width: number, isClose
 
     // 3. Inside road check (encroaching another section's drivable lane)
     if (!crosses) {
-      const halfW = width / 2;
       for (let k = 0; k < n; k++) {
-        const idxDist = isClosed 
-          ? Math.min(Math.abs(j - k), n - Math.abs(j - k)) 
+        const idxDist = isClosed
+          ? Math.min(Math.abs(j - k), n - Math.abs(j - k))
           : Math.abs(j - k);
         if (idxDist < skipIndexRange) continue;
-        
+
+        const halfW = widthAt(k) / 2;
         const d1 = distancePointToPoint(rawRight[j].p1, centerLine[k]);
         const d2 = distancePointToPoint(rawRight[j].p2, centerLine[k]);
         if (d1 < halfW * 0.85 || d2 < halfW * 0.85) {
@@ -316,142 +344,6 @@ export function buildTrackBoundaries(centerLine: Point[], width: number, isClose
   }
 
   return { leftWall, rightWall, checkpoints };
-}
-
-/**
- * Checks if a closed path self-intersects (any two non-adjacent segments cross).
- * O(n²) but fast enough for n≤280.
- */
-function hasCenterlineSelfIntersection(path: Point[]): boolean {
-  const n = path.length;
-  // Skip range: ignore segments that are within 8% of the path length (local neighbors)
-  const skipRange = Math.max(6, Math.floor(n * 0.08));
-
-  for (let i = 0; i < n; i++) {
-    const a1 = path[i];
-    const a2 = path[(i + 1) % n];
-
-    for (let j = i + skipRange; j < n - 1; j++) {
-      const b1 = path[j];
-      const b2 = path[(j + 1) % n];
-      if (getIntersection(a1, a2, b1, b2)) return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Checks if any two non-adjacent centerline points are closer than minDist.
- * Prevents track sections from being so close that walls overlap.
- */
-function hasTrackSectionsTooClose(path: Point[], minDist: number): boolean {
-  const n = path.length;
-  const skipRange = Math.max(8, Math.floor(n * 0.1));
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + skipRange; j < n; j++) {
-      if (distancePointToPoint(path[i], path[j]) < minDist) return true;
-    }
-  }
-  return false;
-}
-
-// Procedural Track Generator — retries until it produces a non-overlapping circuit
-export function generateRandomTrack(width = 65): RacingTrack {
-  const cx = 1100;
-  const cy = 900;
-  const MAX_ATTEMPTS = 10;
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const numControlPoints = 20;
-    const controlPoints: Point[] = [];
-
-    // Control points near angle 0 (= start/finish) get a consistent radius so the
-    // Catmull-Rom spline produces a gentle arc there — effectively a "straight" section.
-    // Turns only begin once the car is already moving and the AI has had time to learn.
-    const AVG_RADIUS = 615; // midpoint between inner (510) and outer (720)
-    const STRAIGHT_CTRL = 4; // how many control points on each side of angle-0 stay "straight"
-
-    for (let i = 0; i < numControlPoints; i++) {
-      const angle = (i / numControlPoints) * Math.PI * 2;
-
-      // Distance from angle-0 measured in control-point steps (wrapping around)
-      const distFromStart = Math.min(i, numControlPoints - i);
-
-      let rad: number;
-      if (distFromStart < STRAIGHT_CTRL) {
-        // Near start/finish: constant radius → gentle arc, AI can drive straight here
-        rad = AVG_RADIUS;
-      } else if (i % 2 === 0) {
-        rad = 510 + (Math.random() * 80 - 40); // inner turn
-      } else {
-        rad = 720 + (Math.random() * 80 - 40); // outer sweep
-      }
-
-      controlPoints.push({
-        x: cx + Math.cos(angle) * rad,
-        y: cy + Math.sin(angle) * rad
-      });
-    }
-
-    // Catmull-Rom spline — 10 points per segment → 200 total path points
-    const path: Point[] = [];
-    const pointsPerSegment = 10;
-
-    for (let i = 0; i < numControlPoints; i++) {
-      const p0 = controlPoints[(i - 1 + numControlPoints) % numControlPoints];
-      const p1 = controlPoints[i];
-      const p2 = controlPoints[(i + 1) % numControlPoints];
-      const p3 = controlPoints[(i + 2) % numControlPoints];
-
-      for (let step = 0; step < pointsPerSegment; step++) {
-        const t = step / pointsPerSegment;
-        const t2 = t * t;
-        const t3 = t2 * t;
-
-        const x = 0.5 * (
-          (2 * p1.x) +
-          (-p0.x + p2.x) * t +
-          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
-        );
-        const y = 0.5 * (
-          (2 * p1.y) +
-          (-p0.y + p2.y) * t +
-          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
-        );
-
-        path.push({ x, y });
-      }
-    }
-
-    // Reject self-intersecting tracks or tracks with sections too close to each other
-    if (hasCenterlineSelfIntersection(path)) continue;
-    if (hasTrackSectionsTooClose(path, width * 1.5)) continue;
-
-    // Valid track found — build boundaries and return
-    const { leftWall, rightWall, checkpoints } = buildTrackBoundaries(path, width, true);
-
-    const startPt = path[0];
-    const nextPt = path[1];
-    const startAngle = Math.atan2(nextPt.y - startPt.y, nextPt.x - startPt.x);
-
-    return {
-      id: 'random',
-      name: 'Bản Đồ Tạo Sinh Ngẫu Nhiên',
-      centerLine: path,
-      leftWall,
-      rightWall,
-      checkpoints,
-      startPoint: startPt,
-      startAngle,
-      width
-    };
-  }
-
-  // All attempts failed — fall back to a known-good preset track
-  return getPresetTrack('monza', width);
 }
 
 // 3 Preset Tracks

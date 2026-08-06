@@ -9,13 +9,15 @@ import QMazeScreen from './components/QMazeScreen';
 import Connect4Screen from './components/Connect4Screen';
 import Soccer2Screen from './components/Soccer2Screen';
 import TagScreen from './components/TagScreen';
-import { AIConfig, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, TagConfig } from './types/game';
+import CellWarScreen from './components/CellWarScreen';
+import { AIConfig, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, TagConfig, CellWarConfig } from './types/game';
 
-type Screen = 'select' | 'setup' | 'caro-arena' | 'racing-arena' | 'flappy-arena' | '2048-arena' | 'qmaze-arena' | 'connect4-arena' | 'soccer-arena' | 'tag-arena';
+type GameId = 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag' | 'cellwar';
+type Screen = 'select' | 'setup' | 'caro-arena' | 'racing-arena' | 'flappy-arena' | '2048-arena' | 'qmaze-arena' | 'connect4-arena' | 'soccer-arena' | 'tag-arena' | 'cellwar-arena';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('select');
-  const [gameType, setGameType] = useState<'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag'>('caro');
+  const [gameType, setGameType] = useState<GameId>('caro');
 
   // Caro configuration states
   const [configX, setConfigX] = useState<AIConfig | null>(null);
@@ -43,8 +45,11 @@ function App() {
   // Tag game configuration state
   const [tagConfig, setTagConfig] = useState<TagConfig | null>(null);
 
+  // Cell War configuration state
+  const [cellWarConfig, setCellWarConfig] = useState<CellWarConfig | null>(null);
+
   // Navigation handlers
-  const handleSelectGame = (gameId: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag') => {
+  const handleSelectGame = (gameId: GameId) => {
     setGameType(gameId);
     setScreen('setup');
   };
@@ -94,6 +99,11 @@ function App() {
     setScreen('tag-arena');
   };
 
+  const handleLaunchCellWar = (config: CellWarConfig) => {
+    setCellWarConfig(config);
+    setScreen('cellwar-arena');
+  };
+
   return (
     <main className="w-full min-h-screen flex flex-col justify-between">
       {screen === 'select' && (
@@ -112,6 +122,7 @@ function App() {
           onLaunchConnect4={handleLaunchConnect4}
           onLaunchSoccer={handleLaunchSoccer}
           onLaunchTag={handleLaunchTag}
+          onLaunchCellWar={handleLaunchCellWar}
         />
       )}
 
@@ -169,6 +180,13 @@ function App() {
       {screen === 'tag-arena' && tagConfig && (
         <TagScreen
           config={tagConfig}
+          onBack={handleBackToSetup}
+        />
+      )}
+
+      {screen === 'cellwar-arena' && cellWarConfig && (
+        <CellWarScreen
+          config={cellWarConfig}
           onBack={handleBackToSetup}
         />
       )}

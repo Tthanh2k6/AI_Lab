@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Play, Settings, ArrowLeft, RefreshCw, Brain } from 'lucide-react';
-import { AIConfig, AIAlgorithm, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, Soccer2Config, TagConfig } from '../types/game';
+import { AIConfig, AIAlgorithm, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, Soccer2Config, TagConfig, CellWarConfig } from '../types/game';
 import { getZeroWeights } from '../utils/trainer';
-import { getPresetTrack, generateRandomTrack } from '../utils/racingPhysics';
+import { getPresetTrack } from '../utils/racingPhysics';
+import { generateTrack, parseSeed, randomSeed, seedToString } from '../utils/trackGen';
 import { FLAPPY, FlappyPipe, createPopulation, stepWorld, heuristicFlap } from '../utils/flappy';
 import { TAG, TAG_MAPS } from '../utils/tagGame';
+import { MAP_SIZES, STRATEGIES, FACTION_COLORS, MapSizeKey } from '../utils/cellwar';
 import Game2048Preview from './Game2048Preview';
 import QMazePreview from './QMazePreview';
 import Connect4Preview from './Connect4Preview';
@@ -53,8 +55,43 @@ function TagMapPreview({ mapIdx, size = 420 }: { mapIdx: number; size?: number }
   );
 }
 
+// Xem trước Cell War: nền lưới + thủ phủ các phe xếp vòng tròn (như lúc khởi đầu).
+function CellWarPreview({ numFactions, sizeKey, size = 420 }: { numFactions: number; sizeKey: MapSizeKey; size?: number }) {
+  const { cols, rows } = MAP_SIZES[sizeKey];
+  const h = (size * rows) / cols;
+  const N = Math.max(2, Math.min(FACTION_COLORS.length, numFactions));
+  const caps = Array.from({ length: N }).map((_, i) => {
+    const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+    return {
+      x: size / 2 + Math.cos(a) * size * 0.32,
+      y: h / 2 + Math.sin(a) * h * 0.32,
+      c: FACTION_COLORS[i].hex,
+      s: STRATEGIES[i % STRATEGIES.length].name,
+    };
+  });
+  return (
+    <svg width={size} height={h} viewBox={`0 0 ${size} ${h}`}
+      className="max-w-full border border-slate-800 rounded-xl shadow-2xl" style={{ background: '#0a0f1c' }}>
+      {Array.from({ length: 13 }).map((_, i) => (
+        <line key={`v${i}`} x1={(size / 12) * i} y1={0} x2={(size / 12) * i} y2={h} stroke="#1e293b" strokeWidth={1} />
+      ))}
+      {Array.from({ length: 9 }).map((_, i) => (
+        <line key={`h${i}`} x1={0} y1={(h / 8) * i} x2={size} y2={(h / 8) * i} stroke="#1e293b" strokeWidth={1} />
+      ))}
+      <rect x={1} y={1} width={size - 2} height={h - 2} fill="none" stroke="#10b981" strokeWidth={2} opacity={0.5} />
+      {caps.map((c, i) => (
+        <g key={i}>
+          <circle cx={c.x} cy={c.y} r={size * 0.05} fill={c.c} opacity={0.25} />
+          <rect x={c.x - size * 0.022} y={c.y - size * 0.022} width={size * 0.044} height={size * 0.044} fill={c.c} rx={2} />
+          <text x={c.x} y={c.y + size * 0.06} fill={c.c} fontSize={11} fontFamily="monospace" textAnchor="middle">{c.s}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 interface SetupScreenProps {
-  gameType: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag';
+  gameType: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag' | 'cellwar';
   onBack: () => void;
   onLaunchArena: (config1: AIConfig, config2: AIConfig, initFromScratch: boolean) => void;
   onLaunchRacing: (config: RacingConfig) => void;
@@ -64,9 +101,10 @@ interface SetupScreenProps {
   onLaunchConnect4: (config: Connect4Config) => void;
   onLaunchSoccer: (config: SoccerConfig) => void;
   onLaunchTag: (config: TagConfig) => void;
+  onLaunchCellWar: (config: CellWarConfig) => void;
 }
 
-export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchRacing, onLaunchFlappy, onLaunch2048, onLaunchQMaze, onLaunchConnect4, onLaunchSoccer, onLaunchTag }: SetupScreenProps) {
+export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchRacing, onLaunchFlappy, onLaunch2048, onLaunchQMaze, onLaunchConnect4, onLaunchSoccer, onLaunchTag, onLaunchCellWar }: SetupScreenProps) {
   // Caro Config states
   const [algo1, setAlgo1] = useState<AIAlgorithm>('MINIMAX');
   const [algo2, setAlgo2] = useState<AIAlgorithm>('MCTS');
@@ -82,10 +120,34 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
   const [numSensors, setNumSensors] = useState<number>(5);
   const [mutationRate, setMutationRate] = useState<number>(0.15); // 15%
   const [speed, setSpeed] = useState<number>(1.2);
-  const [trackId, setTrackId] = useState<string>('oval');
+  const [trackId, setTrackId] = useState<string>('procedural');
   const [enableFailureAvoidance, setEnableFailureAvoidance] = useState<boolean>(true);
   const [enablePlayerCar, setEnablePlayerCar] = useState<boolean>(false);
   const [showTrackBuilder, setShowTrackBuilder] = useState<boolean>(false);
+
+  // ── Map thủ tục (procedural) ──
+  // seed quyết định toàn bộ hình dạng; difficulty quyết định độ gắt của địa hình
+  const [trackSeed, setTrackSeed] = useState<number>(() => randomSeed());
+  const [seedInput, setSeedInput] = useState<string>('');
+  const [trackDifficulty, setTrackDifficulty] = useState<number>(3);
+
+  // Sinh map ngay khi seed/difficulty đổi — dùng cho cả preview lẫn lúc phóng game
+  const proceduralTrack = React.useMemo(
+    () => generateTrack({ seed: trackSeed, difficulty: trackDifficulty }),
+    [trackSeed, trackDifficulty]
+  );
+
+  const rollNewSeed = () => {
+    const s = randomSeed();
+    setTrackSeed(s);
+    setSeedInput('');
+    setTrackId('procedural');
+  };
+
+  const applySeedInput = () => {
+    setTrackSeed(parseSeed(seedInput));
+    setTrackId('procedural');
+  };
 
   // Flappy Bird Config states
   const [flappyPopulation, setFlappyPopulation] = useState<number>(150);
@@ -112,6 +174,12 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
   const [tagSpeed, setTagSpeed] = useState<number>(2);
   const [tagMapIdx, setTagMapIdx] = useState<number>(0);
   const [tagVision, setTagVision] = useState<boolean>(true);
+
+  // Cell War Config state
+  const [cwFactions, setCwFactions] = useState<number>(5);
+  const [cwMapSize, setCwMapSize] = useState<MapSizeKey>('medium');
+  const [cwGrowth, setCwGrowth] = useState<number>(1);
+  const [cwSpeed, setCwSpeed] = useState<number>(4);
 
   // Canvas ref for the lightweight looping simulator on the left
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -378,7 +446,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
     if (!ctx) return;
 
     // Load actual track centerline points
-    const track = trackId === 'random' ? generateRandomTrack() : getPresetTrack(trackId);
+    const track = trackId === 'procedural' ? proceduralTrack : getPresetTrack(trackId);
+    const theme = track.theme;
 
     // Compute bounding box to scale and center on 450x450 canvas
     let minX = Infinity, maxX = -Infinity;
@@ -432,11 +501,11 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
 
       ctx.clearRect(0, 0, width, height);
 
-      // Grid background
-      ctx.fillStyle = '#0a0d18';
+      // Grid background (màu theo biome của map)
+      ctx.fillStyle = theme?.bg ?? '#0a0d18';
       ctx.fillRect(0, 0, width, height);
 
-      ctx.strokeStyle = 'rgba(168, 85, 247, 0.04)';
+      ctx.strokeStyle = theme?.grid ?? 'rgba(168, 85, 247, 0.04)';
       ctx.lineWidth = 1;
       for (let x = 0; x < width; x += 30) {
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
@@ -445,14 +514,29 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
       }
 
+      // Lưới ô của bộ sinh — cho thấy đường đua được ghép từ block trên lưới nào
+      if (track.grid) {
+        const g = track.grid;
+        const gx = (i: number) => canvasCenterX + (g.originX + i * g.cell - trackCenterX) * scale;
+        const gy = (j: number) => canvasCenterY + (g.originY + j * g.cell - trackCenterY) * scale;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.13)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= g.cols; i++) {
+          ctx.beginPath(); ctx.moveTo(gx(i), gy(0)); ctx.lineTo(gx(i), gy(g.rows)); ctx.stroke();
+        }
+        for (let j = 0; j <= g.rows; j++) {
+          ctx.beginPath(); ctx.moveTo(gx(0), gy(j)); ctx.lineTo(gx(g.cols), gy(j)); ctx.stroke();
+        }
+      }
+
       // Draw mini racetrack curve
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
-      ctx.lineWidth = 26;
+      ctx.strokeStyle = theme?.road ?? 'rgba(6, 182, 212, 0.28)';
+      ctx.lineWidth = track.grid ? Math.max(7, track.width * scale) : 26;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
-      
-      const steps = 80;
+
+      const steps = track.grid ? track.centerLine.length : 80;
       for (let i = 0; i <= steps; i++) {
         const a = (i / steps) * Math.PI * 2;
         const pt = getTrackPoint(a);
@@ -482,8 +566,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
       ctx.save();
       ctx.translate(pt1.x, pt1.y);
       ctx.rotate(pt1.angle);
-      ctx.fillStyle = '#22d3ee';
-      ctx.shadowColor = '#06b6d4';
+      ctx.fillStyle = theme?.accent ?? '#22d3ee';
+      ctx.shadowColor = theme?.accent ?? '#06b6d4';
       ctx.shadowBlur = 6;
       ctx.fillRect(-3.5, -7, 7, 14);
       ctx.restore();
@@ -493,8 +577,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
       ctx.save();
       ctx.translate(pt2.x, pt2.y);
       ctx.rotate(pt2.angle);
-      ctx.fillStyle = '#c084fc';
-      ctx.shadowColor = '#a855f7';
+      ctx.fillStyle = theme?.glowRight ?? '#c084fc';
+      ctx.shadowColor = theme?.glowRight ?? '#a855f7';
       ctx.shadowBlur = 6;
       ctx.fillRect(-3.5, -7, 7, 14);
       ctx.restore();
@@ -519,7 +603,7 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [gameType, trackId]);
+  }, [gameType, trackId, proceduralTrack]);
 
   // ── Mô phỏng Flappy Bird trực tiếp ở panel trái (xem AI học theo cấu hình) ──
   useEffect(() => {
@@ -613,7 +697,9 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
         speed,
         trackId,
         enableFailureAvoidance,
-        enablePlayerCar
+        enablePlayerCar,
+        trackSeed,
+        trackDifficulty
       };
       onLaunchRacing(racingConfig);
       return;
@@ -650,6 +736,11 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
 
     if (gameType === 'tag') {
       onLaunchTag({ mutationRate: tagMutation, speed: tagSpeed, startMapIdx: tagMapIdx, showVision: tagVision });
+      return;
+    }
+
+    if (gameType === 'cellwar') {
+      onLaunchCellWar({ numFactions: cwFactions, mapSize: cwMapSize, growthRate: cwGrowth, speed: cwSpeed });
       return;
     }
 
@@ -744,6 +835,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                 <SoccerPreview size={420} mutationRate={soccerMutation} />
               ) : gameType === 'tag' ? (
                 <TagMapPreview mapIdx={tagMapIdx} size={420} />
+              ) : gameType === 'cellwar' ? (
+                <CellWarPreview numFactions={cwFactions} sizeKey={cwMapSize} size={420} />
               ) : (
                 <canvas
                   ref={canvasRef}
@@ -886,6 +979,25 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                   <div className="sim-stat-card">
                     <span className="text-[10px] text-amber-400 block mb-1">PHÒNG 3D</span>
                     <span className="text-sm font-bold text-amber-400">{TAG_MAPS.length} phòng</span>
+                  </div>
+                </div>
+              ) : gameType === 'cellwar' ? (
+                <div className="sim-stats-grid font-mono text-center">
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-slate-500 block mb-1">THUẬT TOÁN</span>
+                    <span className="text-xs font-bold text-white">Heuristic CA</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-emerald-400 block mb-1">SỐ PHE</span>
+                    <span className="text-base font-bold text-emerald-400">{cwFactions}</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-cyan-400 block mb-1">BẢN ĐỒ</span>
+                    <span className="text-sm font-bold text-cyan-400">{MAP_SIZES[cwMapSize].cols}×{MAP_SIZES[cwMapSize].rows}</span>
+                  </div>
+                  <div className="sim-stat-card">
+                    <span className="text-[10px] text-amber-400 block mb-1">CHIẾN THUẬT</span>
+                    <span className="text-sm font-bold text-amber-400">{Math.min(cwFactions, STRATEGIES.length)} kiểu</span>
                   </div>
                 </div>
               ) : (
@@ -1124,15 +1236,122 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                         Singapore (Singapore)
                       </button>
                     </div>
-                    {/* Row 4 - Random */}
+                    {/* Row 4 - Procedural generation */}
                     <div className="flex gap-2" style={{ display: 'flex', gap: '8px' }}>
                       <button
-                        onClick={() => setTrackId('random')}
-                        className={`flex-grow cyber-btn text-[10px] py-2 px-2.5 font-mono font-bold ${trackId === 'random' ? 'cyber-btn-cyan pulse-glow-cyan' : 'cyber-btn-outline'}`}
+                        onClick={() => setTrackId('procedural')}
+                        className={`flex-grow cyber-btn text-[10px] py-2 px-2.5 font-mono font-bold ${trackId === 'procedural' ? 'cyber-btn-cyan pulse-glow-cyan' : 'cyber-btn-outline'}`}
                       >
-                        🎲 Map Ngẫu Nhiên (9 F1 Maps)
+                        🌍 MAP TẠO SINH THỦ TỤC (VÔ HẠN)
                       </button>
                     </div>
+
+                    {/* Bảng điều khiển bộ sinh — chỉ hiện khi đang chọn map thủ tục */}
+                    {trackId === 'procedural' && (
+                      <div className="rounded-xl border border-cyan-500/25 bg-slate-900/60 p-3 flex flex-col gap-3">
+                        {/* Thông tin map vừa sinh */}
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="text-left">
+                            <div
+                              className="text-[12px] font-mono font-bold"
+                              style={{ color: proceduralTrack.theme.accent }}
+                            >
+                              {proceduralTrack.name}
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                              {proceduralTrack.theme.name} · Lưới {proceduralTrack.grid.cols}×{proceduralTrack.grid.rows}
+                              {' '}(ô {proceduralTrack.grid.cell}px) · dùng {proceduralTrack.grid.usedCells}/
+                              {proceduralTrack.grid.cols * proceduralTrack.grid.rows} ô
+                            </div>
+                          </div>
+                          <div className="text-right text-[10px] font-mono text-slate-500 leading-relaxed">
+                            <div>Chu vi <span className="text-slate-300">{proceduralTrack.lengthPx}px</span></div>
+                            <div>Cua gắt nhất <span className="text-slate-300">R{proceduralTrack.minRadius}</span></div>
+                            <div>Lòng đường <span className="text-slate-300">{proceduralTrack.width}px</span></div>
+                          </div>
+                        </div>
+
+                        {/* Các block ghép nên đường đua */}
+                        <div className="flex gap-1.5 flex-wrap">
+                          {([
+                            ['Thẳng', proceduralTrack.blocks.straight, '#22d3ee'],
+                            ['Cong nhẹ', proceduralTrack.blocks.sweep, '#4ade80'],
+                            ['Cong vừa', proceduralTrack.blocks.medium, '#fbbf24'],
+                            ['Cua gấp', proceduralTrack.blocks.hairpin, '#f87171'],
+                          ] as const).map(([label, count, color]) => (
+                            <span
+                              key={label}
+                              className="text-[10px] font-mono px-2 py-1 rounded-md border"
+                              style={{
+                                color: count > 0 ? color : '#475569',
+                                borderColor: count > 0 ? `${color}44` : '#33415544',
+                                background: count > 0 ? `${color}11` : 'transparent',
+                              }}
+                            >
+                              {label} ×{count}
+                            </span>
+                          ))}
+                          <span className="text-[10px] font-mono px-2 py-1 text-slate-500">
+                            thẳng dài nhất {proceduralTrack.blocks.longestStraight}px
+                          </span>
+                        </div>
+
+                        {/* Seed */}
+                        <div>
+                          <div className="flex justify-between text-[10px] font-mono text-slate-400 mb-1">
+                            <span>SEED (cùng seed → cùng map)</span>
+                            <span className="text-cyan-400 font-bold">{seedToString(trackSeed)}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={seedInput}
+                              placeholder={`vd: 12345 hoặc "monza"`}
+                              onChange={(e) => setSeedInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') applySeedInput(); }}
+                              className="flex-1 min-w-0 bg-slate-950/80 border border-slate-700/60 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-200 outline-none focus:border-cyan-500/60"
+                            />
+                            <button
+                              onClick={applySeedInput}
+                              disabled={!seedInput.trim()}
+                              className="cyber-btn cyber-btn-outline text-[10px] py-1.5 px-3 font-mono disabled:opacity-30"
+                            >
+                              Áp dụng
+                            </button>
+                            <button
+                              onClick={rollNewSeed}
+                              title="Đổi seed ngẫu nhiên"
+                              className="cyber-btn cyber-btn-cyan text-[10px] py-1.5 px-3 font-mono font-bold"
+                            >
+                              🎲
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Độ khó địa hình */}
+                        <div>
+                          <div className="flex justify-between text-[10px] font-mono text-slate-400 mb-1">
+                            <span>Độ Khó Địa Hình:</span>
+                            <span className="text-purple-400 font-bold">
+                              {['Thư Giãn', 'Dễ Thở', 'Cân Bằng', 'Khó Nhằn', 'Ác Mộng'][trackDifficulty - 1]} ({trackDifficulty}/5)
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="1"
+                            max="5"
+                            step="1"
+                            value={trackDifficulty}
+                            onChange={(e) => setTrackDifficulty(parseInt(e.target.value))}
+                            className="slider-styled slider-styled-purple"
+                          />
+                          <div className="text-[9px] font-mono text-slate-600 mt-1 text-left">
+                            Cao hơn = đường hẹp hơn, nhiều khúc cua gắt hơn, bề rộng biến thiên mạnh hơn.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Row 6 - Custom Draw */}
                     <div className="flex gap-2" style={{ display: 'flex', gap: '8px' }}>
                       <button
@@ -1559,6 +1778,96 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
               </div>
             )}
 
+            {gameType === 'cellwar' && (
+              <div>
+                <div className="config-ai-card">
+                  <h3 className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                    <Brain className="w-4 h-4 text-emerald-400" />
+                    Cấu Hình Cell War (Chiến tranh lãnh thổ):
+                  </h3>
+
+                  {/* Số phe */}
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Số Phe Tham Chiến:</span>
+                      <span className="text-emerald-400 font-bold">{cwFactions} phe</span>
+                    </div>
+                    <input
+                      type="range" min="2" max={FACTION_COLORS.length} step="1"
+                      value={cwFactions}
+                      onChange={(e) => setCwFactions(parseInt(e.target.value))}
+                      className="slider-styled slider-styled-emerald"
+                    />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {Array.from({ length: cwFactions }).map((_, i) => (
+                        <span key={i} className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded"
+                          style={{ background: `${FACTION_COLORS[i].hex}22`, color: FACTION_COLORS[i].hex }}>
+                          <span className="w-2 h-2 rounded-sm" style={{ background: FACTION_COLORS[i].hex }} />
+                          {STRATEGIES[i % STRATEGIES.length].name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Kích thước bản đồ */}
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-2">
+                      <span>Kích Thước Bản Đồ:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(Object.keys(MAP_SIZES) as MapSizeKey[]).map(k => (
+                        <button
+                          key={k} type="button"
+                          onClick={() => setCwMapSize(k)}
+                          className={`px-3 py-1 text-[10px] font-mono rounded-md font-bold border transition-all ${
+                            cwMapSize === k
+                              ? 'bg-emerald-600 text-white border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                              : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:text-white hover:border-slate-500'
+                          }`}
+                        >
+                          {MAP_SIZES[k].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tốc độ sinh quân */}
+                  <div className="setting-slider-group mb-4">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc Độ Sinh Quân:</span>
+                      <span className="text-amber-400 font-bold">{cwGrowth.toFixed(1)}×</span>
+                    </div>
+                    <input
+                      type="range" min="0.5" max="3" step="0.5"
+                      value={cwGrowth}
+                      onChange={(e) => setCwGrowth(parseFloat(e.target.value))}
+                      className="slider-styled slider-styled-emerald"
+                    />
+                  </div>
+
+                  {/* Tốc độ mô phỏng */}
+                  <div className="setting-slider-group">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                      <span>Tốc Độ Mô Phỏng (tick/khung):</span>
+                      <span className="text-cyan-400 font-bold">{cwSpeed}×</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="16" step="1"
+                      value={cwSpeed}
+                      onChange={(e) => setCwSpeed(parseInt(e.target.value))}
+                      className="slider-styled slider-styled-cyan"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-mono mt-4 leading-relaxed">
+                  Mỗi phe chiếm ô, <span className="text-emerald-400">sinh quân</span> và đẩy quân qua biên giới để bành trướng.{' '}
+                  Mỗi phe theo <span className="text-white">một chiến thuật riêng</span> (hung hãn · bành trướng · cơ hội · phòng thủ · cân bằng) —{' '}
+                  phe cuối cùng còn sống thắng. <span className="text-amber-300">Xem chiến thuật nào thống trị bản đồ!</span>
+                </p>
+              </div>
+            )}
+
           </div>
 
           {/* Launch CTA */}
@@ -1582,6 +1891,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                 ? 'KHỞI CHẠY BÓNG ĐÁ AI 3D'
                 : gameType === 'tag'
                 ? '🎯 KHỞI CHẠY ĐUỔI BẮT AI 3D'
+                : gameType === 'cellwar'
+                ? '🗺️ KHỞI CHẠY CELL WAR'
                 : 'KHỞI CHẠY CONNECT FOUR'}
             </button>
             <p className="text-[10px] text-center text-slate-500 font-mono mt-3">
@@ -1599,6 +1910,8 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                 ? '* Bản nâng cấp Soccer V2 bổ sung kỹ năng nhảy cao né tránh và tranh bóng bổng có cooldown, cải tiến vật lý lưới vát gôn.'
                 : gameType === 'tag'
                 ? '* Chaser học đuổi, Evader học trốn — cả hai tiến hóa song song trong phòng 3D với 4 trụ cột chướng ngại.'
+                : gameType === 'cellwar'
+                ? '* Nhiều phe AI tranh giành lãnh thổ theo kiểu Territorial.io; mỗi phe một chiến thuật — xem ai nuốt trọn bản đồ.'
                 : '* AI dùng Minimax + Alpha-Beta để chơi Connect Four; bấm TỰ CHƠI để đấu với máy.'}
             </p>
           </div>

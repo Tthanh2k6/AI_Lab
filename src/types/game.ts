@@ -83,15 +83,35 @@ export interface NeuralNetworkType {
   layers: NetworkLayer[];
 }
 
+/** Bảng màu của một "biome" đường đua do bộ sinh thủ tục chọn. */
+export interface TrackTheme {
+  id: string;
+  name: string;
+  bg: string;
+  grid: string;
+  road: string;
+  roadEdge: string;
+  lane: string;
+  wallLeft: string;
+  wallRight: string;
+  glowLeft: string;
+  glowRight: string;
+  accent: string;
+}
+
 export interface RacingConfig {
   numCars: number;
   numSensors: number;
   mutationRate: number;
   speed: number; // constant speed
-  trackId: string; // 'oval' | 'scurve' | 'grandprix' | 'random' | 'custom'
+  trackId: string; // 'oval' | 'scurve' | 'grandprix' | 'procedural' | 'custom'
   enableFailureAvoidance: boolean;
   enablePlayerCar: boolean;
   customTrack?: any;
+  /** Seed của map thủ tục (chỉ dùng khi trackId === 'procedural') */
+  trackSeed?: number;
+  /** Độ khó địa hình 1..5 (chỉ dùng khi trackId === 'procedural') */
+  trackDifficulty?: number;
 }
 
 // ============================================================================
@@ -157,4 +177,15 @@ export interface TagConfig {
   speed: number;        // số tick mô phỏng mỗi frame
   startMapIdx?: number; // phòng khởi đầu (chỉ số trong TAG_MAPS)
   showVision?: boolean; // bật tầm nhìn (raycast) ngay từ đầu
+}
+
+// ============================================================================
+// CELL WAR — Chiến tranh lãnh thổ (Territory.io / State.io)
+// ============================================================================
+
+export interface CellWarConfig {
+  numFactions: number;                       // số phe (2..6)
+  mapSize: 'small' | 'medium' | 'large';     // kích thước bản đồ
+  growthRate: number;                        // hệ số sinh quân
+  speed: number;                             // số tick mô phỏng mỗi frame
 }

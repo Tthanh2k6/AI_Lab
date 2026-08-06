@@ -1,11 +1,33 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RefreshCw, Save, Download, ArrowLeft, Brain, User, Zap, Sparkles, Eye, Trophy, AlertTriangle } from 'lucide-react';
 import { RacingConfig, Point, NeuralNetworkType } from '../types/game';
-import { RacingTrack, CarInstance, getPresetTrack, generateRandomTrack, evolveCarPopulation, distancePointToPoint, OffspringInstance } from '../utils/racingPhysics';
+import { RacingTrack, CarInstance, getPresetTrack, evolveCarPopulation, distancePointToPoint, OffspringInstance } from '../utils/racingPhysics';
+import { generateTrack, randomSeed } from '../utils/trackGen';
 
 interface RacingScreenProps {
   config: RacingConfig;
   onBack: () => void;
+}
+
+// Kích thước canvas đua (khớp thuộc tính width/height của <canvas> bên dưới)
+const CANVAS_W = 560;
+const CANVAS_H = 500;
+
+/** Mức phóng vừa đủ để cả đường đua lọt trong khung, chừa 6% lề. */
+function fitZoom(track: RacingTrack): number {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of track.centerLine) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const w = (maxX - minX) + track.width * 2;
+  const h = (maxY - minY) + track.width * 2;
+  if (!(w > 0) || !(h > 0)) return 0.3;
+
+  const z = Math.min(CANVAS_W / w, CANVAS_H / h) * 0.94;
+  return Math.max(0.1, Math.min(1.5, Math.round(z * 100) / 100));
 }
 
 export default function RacingScreen({ config, onBack }: RacingScreenProps) {
@@ -16,14 +38,14 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
   const [baseSpeed] = useState<number>(config.speed);
   
   // Track state
+  const trackDifficulty = config.trackDifficulty ?? 3;
   const [track, setTrack] = useState<RacingTrack>(() => {
     if (config.trackId === 'custom' && config.customTrack) {
       return config.customTrack;
     }
-    if (config.trackId === 'random') {
-      const f1Tracks = ['monza', 'redbull', 'shanghai', 'singapore'];
-      const randomTrackId = f1Tracks[Math.floor(Math.random() * f1Tracks.length)];
-      return getPresetTrack(randomTrackId);
+    // 'random' là tên cũ của chế độ này — vẫn nhận để không vỡ cấu hình đã lưu
+    if (config.trackId === 'procedural' || config.trackId === 'random') {
+      return generateTrack({ seed: config.trackSeed, difficulty: trackDifficulty });
     }
     return getPresetTrack(config.trackId);
   });
@@ -35,7 +57,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
   const [simSpeed, setSimSpeed] = useState<number>(1); // 1x to 5x fast forward
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [followMode, setFollowMode] = useState<boolean>(false); // default to free map view to evaluate whole track
-  const [zoomLevel, setZoomLevel] = useState<number>(0.3); // default zoom out to view whole map
+  // Zoom ôm trọn map: map thủ tục rộng tới ~2400px nên mức cố định cũ (0.3) cắt mất mép
+  const [zoomLevel, setZoomLevel] = useState<number>(() => fitZoom(track));
 
   // Failure learning states
   const [enableFailureAvoidance] = useState<boolean>(config.enableFailureAvoidance);
@@ -87,6 +110,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
     const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
     const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
     cameraRef.current = { x: cx, y: cy };
+    // Map mới có thể to nhỏ khác hẳn map cũ → chỉnh lại mức phóng cho vừa khung
+    setZoomLevel(fitZoom(track));
   }, [track]);
 
   // --------------------------------------------------------------------------
@@ -313,12 +338,15 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           const w = canvas.width;
           const h = canvas.height;
 
+          // Bảng màu theo biome của map (map thủ tục), fallback về tông neon cũ
+          const th = t.theme;
+
           // Clear
-          ctx.fillStyle = '#06070c';
+          ctx.fillStyle = th?.bg ?? '#06070c';
           ctx.fillRect(0, 0, w, h);
 
           // Grid Background
-          ctx.strokeStyle = 'rgba(124, 58, 237, 0.03)';
+          ctx.strokeStyle = th?.grid ?? 'rgba(124, 58, 237, 0.03)';
           ctx.lineWidth = 1;
           for (let gx = 0; gx < w; gx += 40) {
             ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
@@ -386,20 +414,36 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           });
 
           // 2. Draw Track Lanes
-          ctx.strokeStyle = 'rgba(6, 182, 212, 0.18)';
-          ctx.lineWidth = t.width;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          ctx.beginPath();
-          t.centerLine.forEach((pt, idx) => {
-            if (idx === 0) ctx.moveTo(pt.x, pt.y);
-            else ctx.lineTo(pt.x, pt.y);
-          });
-          ctx.closePath();
-          ctx.stroke();
+          ctx.strokeStyle = th?.road ?? 'rgba(6, 182, 212, 0.18)';
+
+          if (t.widths) {
+            // Map thủ tục có bề rộng biến thiên → tô từng đoạn với lineWidth riêng
+            const cl = t.centerLine;
+            const ws = t.widths;
+            for (let i = 0; i < cl.length; i++) {
+              const a = cl[i];
+              const b = cl[(i + 1) % cl.length];
+              ctx.lineWidth = (ws[i] + ws[(i + 1) % ws.length]) / 2;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+          } else {
+            ctx.lineWidth = t.width;
+            ctx.beginPath();
+            t.centerLine.forEach((pt, idx) => {
+              if (idx === 0) ctx.moveTo(pt.x, pt.y);
+              else ctx.lineTo(pt.x, pt.y);
+            });
+            ctx.closePath();
+            ctx.stroke();
+          }
 
           // Central Dash Lanes
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+          ctx.strokeStyle = th?.lane ?? 'rgba(255, 255, 255, 0.06)';
           ctx.lineWidth = 2;
           ctx.setLineDash([10, 15]);
           ctx.beginPath();
@@ -412,8 +456,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           ctx.setLineDash([]);
 
           // 3. Draw Track Boundary Walls
-          ctx.strokeStyle = 'rgba(168, 85, 247, 0.55)';
-          ctx.shadowColor = '#a855f7';
+          ctx.strokeStyle = th?.wallLeft ?? 'rgba(168, 85, 247, 0.55)';
+          ctx.shadowColor = th?.glowLeft ?? '#a855f7';
           ctx.shadowBlur = 4;
           ctx.lineWidth = 3.5;
 
@@ -424,8 +468,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           });
           ctx.stroke();
 
-          ctx.strokeStyle = 'rgba(236, 72, 153, 0.55)';
-          ctx.shadowColor = '#ec4899';
+          ctx.strokeStyle = th?.wallRight ?? 'rgba(236, 72, 153, 0.55)';
+          ctx.shadowColor = th?.glowRight ?? '#ec4899';
           ctx.beginPath();
           t.rightWall.forEach((seg) => {
             ctx.moveTo(seg.p1.x, seg.p1.y);
@@ -605,21 +649,28 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
   // --------------------------------------------------------------------------
   // USER ACTIONS
   // --------------------------------------------------------------------------
+  /** Sinh lại map thủ tục với seed mới — mỗi lần reset là một thế giới khác. */
+  const regenerateTrack = (seed?: number) => {
+    const nextTrack = generateTrack({
+      seed: seed ?? randomSeed(),
+      difficulty: trackDifficulty,
+    });
+    // Always switch: setTrack triggers the trackRef sync effect (no loop restart) and initPopulation effect
+    crashMarkersRef.current = [];
+    setTrack(nextTrack);
+    setCrashMarkers([]);
+    setGeneration(0);
+    setHighestFitness(0);
+    setEliteHistory([]);
+    setBestLapTime(Infinity);
+    setLapRecord('N/A');
+    setIsPhase2(false);
+  };
+
   const handleResetTraining = () => {
-    if (config.trackId === 'random') {
-      const f1Tracks = ['monza', 'redbull', 'shanghai', 'singapore'];
-      const randomTrackId = f1Tracks[Math.floor(Math.random() * f1Tracks.length)];
-      const nextTrack = getPresetTrack(randomTrackId);
-      // Always switch: setTrack triggers the trackRef sync effect (no loop restart) and initPopulation effect
-      crashMarkersRef.current = [];
-      setTrack(nextTrack);
-      setCrashMarkers([]);
-      setGeneration(0);
-      setHighestFitness(0);
-      setEliteHistory([]);
-      setBestLapTime(Infinity);
-      setLapRecord('N/A');
-      setIsPhase2(false);
+    // Map thủ tục: reset = sinh hẳn một thế giới mới
+    if (config.trackId === 'procedural' || config.trackId === 'random') {
+      regenerateTrack();
       return;
     }
 
@@ -1004,17 +1055,34 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
             {/* Canvas */}
             <canvas
               ref={canvasRef}
-              width={560}
-              height={500}
+              width={CANVAS_W}
+              height={CANVAS_H}
               className="max-w-full aspect-video border border-slate-900 rounded-xl shadow-2xl"
             />
 
             {/* Active details */}
-            <div className="mt-4 flex justify-between items-center w-full px-4">
-              <div className="text-xs font-mono text-slate-500">
+            <div className="mt-4 flex justify-between items-center w-full px-4 gap-3 flex-wrap">
+              <div className="text-xs font-mono text-slate-500 text-left">
                 Đường đua: <span className="text-slate-300">{track.name}</span>
+                {track.seedLabel && (
+                  <div className="text-[10px] text-slate-600 mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span>
+                      SEED <span style={{ color: track.theme?.accent }}>{track.seedLabel}</span>
+                    </span>
+                    <span>· {track.theme?.name}</span>
+                    <span>· Độ khó {track.difficulty}/5</span>
+                    <span>· {track.lengthPx}px</span>
+                    <button
+                      onClick={() => regenerateTrack()}
+                      title="Sinh một đường đua hoàn toàn mới"
+                      className="text-[10px] font-mono text-cyan-500 hover:text-cyan-300 underline underline-offset-2 bg-transparent border-none cursor-pointer p-0"
+                    >
+                      🎲 map mới
+                    </button>
+                  </div>
+                )}
               </div>
-              
+
               {enablePlayerCar && (
                 <div className="flex items-center gap-1 text-amber-400 font-mono text-xs bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-md">
                   <User className="w-3.5 h-3.5" />
@@ -1111,9 +1179,9 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
               </div>
               <input
                 type="range"
-                min="0.3"
+                min="0.1"
                 max="1.5"
-                step="0.1"
+                step="0.05"
                 value={zoomLevel}
                 onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
                 className="slider-styled slider-styled-purple"
