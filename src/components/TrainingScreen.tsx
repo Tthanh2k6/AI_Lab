@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, RefreshCw, Save, Download, ArrowLeft, Brain, User, Zap, Sparkles } from 'lucide-react';
 import { Board, Player, Move, AIConfig, SearchMetrics, TrainingMetrics, HeuristicWeights } from '../types/game';
-import { useAIWorker } from '../hooks/useAIWorker';
+import { useAIWorker, SearchCancelledError } from '../hooks/useAIWorker';
 import { checkWinner, isBoardFull } from '../utils/evaluator';
 import { computeBoardHash, updateHash } from '../utils/zobrist';
 import { evolveWeights, reinforceWeights, getZeroWeights, getMasterWeights, mutateWeights } from '../utils/trainer';
@@ -11,6 +11,8 @@ interface TrainingScreenProps {
   initialConfigX: AIConfig;
   initialConfigO: AIConfig;
   initFromScratch: boolean;
+  /** Ngân sách suy nghĩ mỗi nước (ms) — lấy từ màn cấu hình, vẫn chỉnh được trong lúc chơi */
+  initialTimeLimitMs?: number;
   onBack: () => void;
 }
 
@@ -18,6 +20,7 @@ export default function TrainingScreen({
   initialConfigX,
   initialConfigO,
   initFromScratch,
+  initialTimeLimitMs = 100,
   onBack
 }: TrainingScreenProps) {
   // Game states
@@ -27,11 +30,9 @@ export default function TrainingScreen({
   const [winner, setWinner] = useState<Player | 'DRAW' | null>(null);
   const [latestMove, setLatestMove] = useState<Move | null>(null);
   
-  // Zobrist hash
-  const hashRef = useRef<number>(0);
-
-  // Guard ref for async search loop execution
-  const searchingRef = useRef<boolean>(false);
+  // Zobrist hash of the current position, updated incrementally on every move
+  const [initialHash] = useState(() => computeBoardHash(board, turn));
+  const hashRef = useRef<number>(initialHash);
 
   // AI Configurations & Evolutionary weights
   const [configX, setConfigX] = useState<AIConfig>(initialConfigX);
@@ -43,7 +44,7 @@ export default function TrainingScreen({
   // Training loop controllers
   const [isTrainingPaused, setIsTrainingPaused] = useState(false);
   const [moveDelay, setMoveDelay] = useState<number>(100); // speed control (ms between turns)
-  const [timeLimitMs, setTimeLimitMs] = useState<number>(100); // worker depth time out
+  const [timeLimitMs, setTimeLimitMs] = useState<number>(initialTimeLimitMs); // worker depth time out
 
   // Training Metrics
   const [metrics, setMetrics] = useState<TrainingMetrics>({
@@ -69,31 +70,14 @@ export default function TrainingScreen({
   const [searchMetricsO, setSearchMetricsO] = useState<SearchMetrics | null>(null);
 
   // Web Worker hook
-  const { getBestMove, isSearching, searchMetrics, terminateActiveSearch } = useAIWorker();
+  const { getBestMove, terminateActiveSearch } = useAIWorker();
 
   // Canvas ref for drawing the board
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Initialize Board Hash on start or reset
-  useEffect(() => {
-    hashRef.current = computeBoardHash(board, turn);
-  }, []);
-
-  // Update rolling search metrics when search completes
-  useEffect(() => {
-    if (searchMetrics) {
-      if (turn === 'X') {
-        setSearchMetricsX(searchMetrics);
-      } else {
-        setSearchMetricsO(searchMetrics);
-      }
-    }
-  }, [searchMetrics]);
-
   // RESET Game Board
   const resetBoard = useCallback(() => {
     terminateActiveSearch();
-    searchingRef.current = false; // Reset search guard ref
     const newBoard = Array(20).fill(null).map(() => Array(20).fill(null));
     setBoard(newBoard);
     
@@ -352,9 +336,19 @@ export default function TrainingScreen({
     }
   }, [board, turn, gameStatus, handleGameOver]);
 
+  // The async search reads these through refs so that dragging a slider (or a
+  // re-created makeMove) does not restart a search that is already running.
+  const makeMoveRef = useRef(makeMove);
+  const moveDelayRef = useRef(moveDelay);
+  const timeLimitRef = useRef(timeLimitMs);
+  useEffect(() => {
+    makeMoveRef.current = makeMove;
+    moveDelayRef.current = moveDelay;
+    timeLimitRef.current = timeLimitMs;
+  });
+
   useEffect(() => {
     if (gameStatus !== 'PLAYING' || isTrainingPaused) return;
-    if (searchingRef.current) return;
 
     // Check if it's Human vs AI and human's turn
     const isHumanTurn = (turn === 'X' && humanPlayer === 'X') || (turn === 'O' && humanPlayer === 'O');
@@ -362,35 +356,34 @@ export default function TrainingScreen({
 
     const activeConfig = turn === 'X' ? configX : configO;
 
-    let timeoutId: number;
+    // Each run of this effect owns exactly one search. When its deps change
+    // (pause, human override, new board...) the cleanup marks the run as
+    // cancelled, so a late result can neither play a move into the wrong
+    // position nor leave a stale "still searching" flag that blocks the loop.
+    let cancelled = false;
+    let timeoutId: number | undefined;
 
-    const runWorkerSearch = async () => {
-      try {
-        searchingRef.current = true;
-        const result = await getBestMove(
-          board,
-          turn,
-          activeConfig,
-          hashRef.current,
-          timeLimitMs
-        );
-        
+    getBestMove(board, turn, activeConfig, hashRef.current, timeLimitRef.current)
+      .then(result => {
+        if (cancelled) return;
+        if (turn === 'X') setSearchMetricsX(result.metrics);
+        else setSearchMetricsO(result.metrics);
+
         timeoutId = window.setTimeout(() => {
-          searchingRef.current = false;
-          makeMove(result.move.r, result.move.c, turn);
-        }, moveDelay);
-      } catch (err) {
-        searchingRef.current = false;
+          timeoutId = undefined;
+          makeMoveRef.current(result.move.r, result.move.c, turn);
+        }, moveDelayRef.current);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || err instanceof SearchCancelledError) return;
         console.error('Worker search failed:', err);
-      }
-    };
-
-    runWorkerSearch();
+      });
 
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      cancelled = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
-  }, [board, turn, gameStatus, isTrainingPaused, configX, configO, getBestMove, makeMove, moveDelay, timeLimitMs, humanPlayer]);
+  }, [board, turn, gameStatus, isTrainingPaused, humanPlayer, configX, configO, getBestMove]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (gameStatus !== 'PLAYING') return;
@@ -452,7 +445,7 @@ export default function TrainingScreen({
           } else {
             alert('Định dạng tệp không khớp Gomoku weights.');
           }
-        } catch (err) {
+        } catch {
           alert('Không thể đọc tệp cấu hình.');
         }
       };
@@ -705,7 +698,7 @@ export default function TrainingScreen({
               <input
                 type="range"
                 min="10"
-                max="300"
+                max="1000"
                 step="10"
                 value={timeLimitMs}
                 onChange={(e) => setTimeLimitMs(parseInt(e.target.value))}

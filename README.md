@@ -6,9 +6,9 @@
 
 ---
 
-## 🎮 Các chế độ trò chơi & Mô phỏng (8 trò chơi)
+## 🎮 Các chế độ trò chơi & Mô phỏng (9 trò chơi)
 
-Dự án tích hợp đầy đủ 8 chế độ chơi đa dạng với độ khó lập trình và giải thuật AI khác nhau:
+Dự án tích hợp đầy đủ 9 chế độ chơi đa dạng với độ khó lập trình và giải thuật AI khác nhau:
 
 ### 1. 🦅 Flappy Bird
 *   **Mô tả**: Huấn luyện một đàn chim tự học cách bay luồn qua các đường ống có độ cao ngẫu nhiên. Người dùng có thể tùy chỉnh kích thước quần thể và tỷ lệ đột biến. Có chế độ cho phép người dùng tự chơi.
@@ -32,9 +32,9 @@ Dự án tích hợp đầy đủ 8 chế độ chơi đa dạng với độ kh�
 
 ### 5. 🏎️ Đua Xe AI (AI Racing)
 *   **Mô tả**: Đàn xe tự học cách điều khiển (tăng tốc, phanh, bẻ lái) để hoàn thành vòng đua mà không đâm vào lề hay chướng ngại vật. Xe sử dụng các cảm biến tia quét (Raycasting Sensors) để nhận biết khoảng cách xung quanh.
-*   **Tính năng đặc biệt**: Tích hợp **Trình tạo đường đua (Track Builder)** cho phép người dùng tự vẽ đường đua tùy ý.
-*   **Giải thuật**: Mạng nơ-ron (Feedforward Neural Network) + Thuật toán tiến hóa di truyền.
-*   **Tham số**: Số lượng xe, Số lượng cảm biến (tia quét), Tỷ lệ đột biến, Tốc độ xe.
+*   **Tính năng đặc biệt**: 7 đường đua có sẵn (Oval, Đèo chữ S, F1 Grand Prix, Monza, Red Bull Ring, Thượng Hải, Singapore), **bộ sinh đường đua thủ tục theo seed** (cùng seed → cùng map, 5 mức độ khó, 6 biome màu sắc) và **Trình tạo đường đua (Track Builder)** cho phép tự vẽ đường đua rồi lưu/nạp file JSON.
+*   **Giải thuật**: Mạng nơ-ron (Feedforward Neural Network) + Thuật toán tiến hóa di truyền, chia 2 giai đoạn: dò đường ở tốc độ cố định → tối ưu tốc độ (AI tự điều tốc ±30%).
+*   **Tham số**: Số lượng xe, Số lượng cảm biến (tia quét), Tỷ lệ đột biến, Tốc độ cơ bản của xe, Seed & độ khó map.
 
 ### 6. ♟️ Cờ Caro (Gomoku 20×20)
 *   **Mô tả**: Đấu trường cờ Caro trên bàn cờ kích thước lớn 20×20. Hai AI (X và O) đối đầu trực tiếp. Có thể cấu hình riêng biệt giải thuật cho từng bên để so sánh hiệu năng.
@@ -50,9 +50,14 @@ Dự án tích hợp đầy đủ 8 chế độ chơi đa dạng với độ kh�
 *   **Tham số**: Tỷ lệ đột biến, Tốc độ mô phỏng (tua nhanh quá trình học).
 
 ### 8. 🏃‍♂️ Đuổi Bắt AI 3D (Tag 3D)
-*   **Mô tả**: Mô phỏng đấu trường đuổi bắt trong không gian 3D kín có 4 trụ cột chướng ngại vật di động (người chơi có thể đẩy dịch chuyển để chắn đường). AI Đỏ (Chaser) tự học cách đuổi bắt, AI Xanh (Evader) tự học cách né tránh và ẩn nấp sau các khối trụ.
-*   **Giải thuật**: Tiến hóa song song đối kháng (Co-evolution) dựa trên mạng nơ-ron và cảm biến raycast 3D 8 hướng.
-*   **Tham số**: Tỷ lệ đột biến, Tốc độ mô phỏng.
+*   **Mô tả**: Đấu trường đuổi bắt 3D giữa **KAI** (xanh dương, Chaser) và **ALBERT** (cam, Evader) qua 6 phòng bố cục khác nhau: phòng trống, hộp kéo/đẩy được, tường chắn, cột trụ, hành lang chữ S. Cả hai có thể nhảy và đứng lên nóc hộp; ALBERT được nắm/kéo hộp để chặn đường. Đổi phòng giữa chừng vẫn giữ nguyên bộ não đã học.
+*   **Giải thuật**: Tiến hóa quần thể song song đối kháng (26 cá thể mỗi vai, huấn luyện ngầm theo ngân sách thời gian mỗi khung hình, kèm bot luật cứng để bên yếu không mất tín hiệu học), mạng nơ-ron 23 input với cảm biến raycast 8 hướng, cân bằng động tốc độ để trận hiển thị luôn căng.
+*   **Tham số**: Tỷ lệ đột biến, Tốc độ mô phỏng, Phòng khởi đầu, Hiển thị tầm nhìn AI.
+
+### 9. 🗺️ Cell War (Chiến tranh lãnh thổ)
+*   **Mô tả**: Từ 2 đến 6 phe AI tranh giành một bản đồ ô vuông kiểu Territorial.io: ô có chủ sinh quân theo thời gian, ô biên giới đẩy quân sang ô láng giềng để chiếm, quân nội địa tự khuếch tán ra tiền tuyến. Phe cuối cùng còn sống (hoặc nhiều đất nhất khi hết giờ) thắng.
+*   **Giải thuật**: Thuần heuristic — mỗi phe theo một chiến thuật riêng (Hung hãn, Bành trướng, Cơ hội, Phòng thủ, Cân bằng) để xem chiến thuật nào thống trị bản đồ.
+*   **Tham số**: Số phe, Kích thước bản đồ, Tốc độ sinh quân, Tốc độ mô phỏng.
 
 ---
 
@@ -60,6 +65,7 @@ Dự án tích hợp đầy đủ 8 chế độ chơi đa dạng với độ kh�
 
 *   **React 19** + **TypeScript** — Xây dựng giao diện ứng dụng modular, quản lý state và luồng dữ liệu chặt chẽ.
 *   **Vite 8** — Trình biên dịch cực nhanh phục vụ quá trình phát triển (Hot Module Replacement) và tối ưu hóa đóng gói.
+*   **Tailwind CSS 4** — Utility CSS cho toàn bộ giao diện, kết hợp bảng màu tùy chỉnh trong `src/index.css`.
 *   **Three.js** — Thư viện dựng đồ họa 3D thời gian thực cho các trò chơi bóng đá (Soccer 3D) và đuổi bắt (Tag 3D), xử lý va chạm vật lý cứng 3D và camera theo dõi động.
 *   **HTML5 Canvas (2D)** — Dựng hình đồ họa mượt mà hiệu năng cao cho Đua xe, Flappy Bird, Q-Maze, 2048, Connect 4 và Caro.
 *   **Web Workers (Vite Native Workers)** — Đẩy toàn bộ các tác vụ tính toán nặng (tìm kiếm Minimax/MCTS sâu, mô phỏng tiến hóa quần thể nhiều cá thể) xuống luồng phụ chạy nền, giữ cho giao diện UI luôn mượt mà ở tốc độ 60fps.
@@ -83,7 +89,7 @@ AI_Lab/
 │   ├── main.tsx            # Điểm khởi đầu render ứng dụng React
 │   │
 │   ├── components/         # Các thành phần giao diện màn hình
-│   │   ├── SelectGameScreen.tsx    # Giao diện chọn 1 trong 8 trò chơi
+│   │   ├── SelectGameScreen.tsx    # Giao diện chọn 1 trong 9 trò chơi
 │   │   ├── SetupScreen.tsx         # Giao diện cấu hình tham số AI chi tiết trước khi chạy
 │   │   ├── TrainingScreen.tsx      # Giao diện thi đấu/huấn luyện Caro 20x20
 │   │   ├── RacingScreen.tsx        # Giao diện giả lập đua xe AI & Track Builder
@@ -91,7 +97,8 @@ AI_Lab/
 │   │   ├── QMazeScreen.tsx         # Giao diện hiển thị robot học thoát mê cung
 │   │   ├── Connect4Screen.tsx      # Giao diện bàn cờ Connect 4 đấu với AI
 │   │   ├── Soccer2Screen.tsx       # Giao diện đấu trường bóng đá 3D thực tế
-│   │   ├── TagScreen.tsx           # Giao diện đuổi bắt 3D (Chaser vs Evader)
+│   │   ├── TagScreen.tsx           # Giao diện đuổi bắt 3D (KAI vs ALBERT, 6 phòng)
+│   │   ├── CellWarScreen.tsx       # Giao diện chiến tranh lãnh thổ nhiều phe
 │   │   ├── TrackBuilder.tsx        # Trình vẽ đường đua cho game Racing
 │   │   ├── Board2048.tsx           # Giao diện lưới chơi 2048
 │   │   └── *Preview.tsx            # Các thành phần preview nhỏ hiển thị ở Setup
@@ -102,13 +109,15 @@ AI_Lab/
 │   │   ├── evaluator.ts            # Hàm lượng giá, kiểm tra thắng thua trên lưới Caro
 │   │   ├── zobrist.ts              # Tạo hash bàn cờ cho Transposition Table (Caro)
 │   │   ├── trainer.ts              # Quản trị viên lưu trữ/lót mẫu tiến hóa Caro
-│   │   ├── racingPhysics.ts        # Vật lý xe đua, cảm biến raycast 2D, NN & Genetic
+│   │   ├── racingPhysics.ts        # Vật lý xe đua, cảm biến raycast 2D, NN & Genetic, 7 đường đua có sẵn
+│   │   ├── trackGen.ts             # Bộ sinh đường đua thủ tục theo seed (lưới block, biome, độ khó)
 │   │   ├── flappy.ts               # Bộ sinh ống, va chạm vật lý Flappy Bird
 │   │   ├── game2048.ts             # Bộ sinh ô số mới, trượt gộp ô và thuật toán Expectimax
 │   │   ├── connect4.ts             # Trạng thái bàn cờ Connect 4 & lượng giá nước đi
 │   │   ├── qmaze.ts                # Khởi tạo ma trận mê cung & cập nhật Q-Table học tăng cường
 │   │   ├── soccer2.ts              # Quy tắc di chuyển, va chạm người-bóng-tường 3D & Neuroevolution
 │   │   ├── tagGame.ts              # Logic đuổi bắt, 8 cảm biến raycast 3D, va chạm chướng ngại vật
+│   │   ├── cellwar.ts              # Mô phỏng chiến tranh lãnh thổ nhiều phe (heuristic)
 │   │   └── render*.ts              # Các hàm chuyên trách vẽ Canvas (2D) hoặc điều phối dựng Three.js (3D)
 │   │
 │   ├── hooks/              # Custom React Hooks
@@ -118,7 +127,7 @@ AI_Lab/
 │   │   └── ai.worker.ts            # Web Worker độc lập thực thi Minimax/MCTS cho Caro
 │   │
 │   └── types/              # Định nghĩa cấu trúc dữ liệu (TypeScript Interfaces)
-│       └── game.ts                 # Kiểu dữ liệu cho cấu hình, trạng thái của toàn bộ 8 game
+│       └── game.ts                 # Kiểu dữ liệu cho cấu hình, trạng thái của toàn bộ 9 game
 ```
 
 ---

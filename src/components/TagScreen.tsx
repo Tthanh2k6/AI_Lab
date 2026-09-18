@@ -14,12 +14,15 @@ const SPEEDS = [1, 2, 4, 8, 16, 50];
 export default function TagScreen({ config, onBack }: Props) {
   const initialMapIdx = config.startMapIdx ?? 0;
   const wrapRef     = useRef<HTMLDivElement | null>(null);
-  const worldRef    = useRef<TagWorld>(createTagWorld(initialMapIdx));
+  // Thế giới gồm 2 quần thể × 26 mạng nơ-ron — chỉ tạo đúng một lần, không tạo lại mỗi lần render
+  const [initialWorld] = useState<TagWorld>(() => createTagWorld(initialMapIdx));
+  const worldRef    = useRef<TagWorld>(initialWorld);
   const rendererRef = useRef<TagRenderer | null>(null);
   const rafRef      = useRef<number | null>(null);
   const runningRef  = useRef(true);
   const speedRef    = useRef(config.speed ?? 2);
   const mutRef      = useRef(config.mutationRate ?? 0.12);
+  const visionRef   = useRef(config.showVision ?? true);
   const frameRef    = useRef(0);
 
   const [isRunning, setIsRunning] = useState(true);
@@ -47,7 +50,7 @@ export default function TagScreen({ config, onBack }: Props) {
     const cw = wrap.clientWidth  || 960;
     const ch = wrap.clientHeight || 600;
     const renderer = new TagRenderer(wrap, cw, ch);
-    renderer.setVision(config.showVision ?? true);
+    renderer.setVision(visionRef.current);
     rendererRef.current = renderer;
 
     const loop = () => {
@@ -151,22 +154,22 @@ export default function TagScreen({ config, onBack }: Props) {
 
           <span className="text-slate-600 font-bold text-lg">:</span>
 
-          {/* ALBERT (Evader) score */}
+          {/* ALBERT (Evader) score — màu cam khớp với nhân vật trong phòng 3D */}
           <div className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 border"
-            style={{ background: 'rgba(248,250,252,0.06)', borderColor: 'rgba(248,250,252,0.2)' }}>
+            style={{ background: 'rgba(249,115,22,0.1)', borderColor: 'rgba(249,115,22,0.35)' }}>
             <span className="text-2xl font-extrabold font-mono"
-              style={{ color: '#f1f5f9', textShadow: '0 0 12px rgba(248,250,252,.3)' }}>
+              style={{ color: '#fb923c', textShadow: '0 0 12px rgba(251,146,60,.5)' }}>
               {stats.evaderWins}
             </span>
-            <span className="text-[10px] font-mono text-slate-300 font-bold">ALBERT</span>
-            <div className="w-3 h-3 rounded-sm" style={{ background: '#f8fafc' }} />
+            <span className="text-[10px] font-mono text-orange-400 font-bold">ALBERT</span>
+            <div className="w-3 h-3 rounded-sm" style={{ background: '#f97316' }} />
           </div>
 
           {/* Tag progress */}
           <div className="flex items-center gap-1.5 bg-slate-800/80 border border-amber-500/50 rounded-lg px-2.5 py-1 shadow-[0_0_10px_rgba(251,191,36,0.15)]">
             <Zap className="w-3.5 h-3.5 text-amber-400" />
             <div>
-              <span className="text-[8px] text-slate-300 block leading-none font-bold uppercase tracking-wide">BẮT ĐỰC</span>
+              <span className="text-[8px] text-slate-300 block leading-none font-bold uppercase tracking-wide">BẮT ĐƯỢC</span>
               <span className="text-base font-extrabold text-amber-300 font-mono" style={{ textShadow: '0 0 8px rgba(251,191,36,.5)' }}>{stats.matchTagCount}/{TAG.MAX_TAGS}</span>
             </div>
           </div>
@@ -318,11 +321,11 @@ export default function TagScreen({ config, onBack }: Props) {
 
           {/* ALBERT (Evader) Card */}
           <div className="rounded-xl p-3 border flex flex-col gap-2"
-            style={{ background: 'rgba(248,250,252,0.04)', borderColor: 'rgba(248,250,252,0.15)' }}>
+            style={{ background: 'rgba(249,115,22,0.08)', borderColor: 'rgba(249,115,22,0.25)' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-4 rounded" style={{ background: '#f8fafc', display: 'block' }} />
-                <span className="font-bold text-white text-[12px]">⬜ ALBERT (Trốn)</span>
+                <span className="w-2 h-4 rounded" style={{ background: '#f97316', display: 'block' }} />
+                <span className="font-bold text-white text-[12px]">🟠 ALBERT (Trốn)</span>
               </div>
               <div className="flex items-center gap-1">
                 {stats.evaderCd === 0
@@ -334,7 +337,7 @@ export default function TagScreen({ config, onBack }: Props) {
             <div className="grid grid-cols-2 gap-1.5 text-center">
               <div className="bg-slate-950/40 rounded p-1.5 border border-slate-800/40">
                 <span className="text-[8px] text-slate-500 block">VÁN NÀY</span>
-                <span className="text-sm font-extrabold text-slate-200 font-mono">{stats.evaderFit}</span>
+                <span className="text-sm font-extrabold text-orange-400 font-mono">{stats.evaderFit}</span>
               </div>
               <div className="bg-slate-950/40 rounded p-1.5 border border-slate-800/40">
                 <span className="text-[8px] text-slate-500 block">KỶ LỤC</span>
@@ -343,12 +346,12 @@ export default function TagScreen({ config, onBack }: Props) {
             </div>
 
             <div className="text-[10px] text-slate-400 flex justify-between">
-              <span>Độ cao: <span className="text-slate-200 font-mono">{stats.evaderZ}m</span></span>
-              <span>Thắng: <span className="text-slate-200 font-bold">{stats.evaderWins}</span></span>
+              <span>Độ cao: <span className="text-orange-300 font-mono">{stats.evaderZ}m</span></span>
+              <span>Thắng: <span className="text-orange-300 font-bold">{stats.evaderWins}</span></span>
             </div>
 
             <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-slate-500 to-slate-300 transition-all duration-200"
+              <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-200"
                 style={{ width: `${Math.min(100, stats.evaderBest > 0 ? (stats.evaderFit / stats.evaderBest) * 100 : 50)}%` }} />
             </div>
           </div>
@@ -388,11 +391,11 @@ export default function TagScreen({ config, onBack }: Props) {
                 <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-300"
                   style={{ width: `${kaiWinRate}%` }} />
               </div>
-              <span className="text-[9px] text-slate-400 w-8 text-right">ALB</span>
+              <span className="text-[9px] text-orange-400 w-8 text-right">ALB</span>
             </div>
             <div className="flex justify-between text-[10px]">
               <span className="text-blue-400 font-bold">{kaiWinRate}%</span>
-              <span className="text-slate-400 font-bold">{100 - kaiWinRate}%</span>
+              <span className="text-orange-400 font-bold">{100 - kaiWinRate}%</span>
             </div>
           </div>
 
@@ -406,7 +409,7 @@ export default function TagScreen({ config, onBack }: Props) {
             </summary>
             <div className="p-3 leading-relaxed text-slate-400 border-t border-slate-800 flex flex-col gap-2 text-[10px]">
               <p><b className="text-blue-400">KAI (xanh)</b> = Chaser — tự học đuổi Albert. Bắt đủ <b className="text-amber-400">{TAG.MAX_TAGS} lần</b> → thắng ván.</p>
-              <p><b className="text-white">ALBERT (cam)</b> = Evader — tự học trốn Kai. Sống hết giờ phòng → thắng ván.</p>
+              <p><b className="text-orange-400">ALBERT (cam)</b> = Evader — tự học trốn Kai. Sống hết giờ phòng → thắng ván.</p>
               <p><b className="text-indigo-400">{TAG_MAPS.length} phòng</b> bố cục khác nhau (hộp / tường chắn / cột trụ...) & thời lượng riêng. Đổi phòng <b className="text-white">giữ nguyên não</b> — AI train tiếp trên não cũ.</p>
               <p>Mỗi AI có <b className="text-indigo-400">8 tia nhìn</b> (raycast). Nút <b className="text-emerald-400">TẦM NHÌN AI</b> bật/tắt: <span className="text-slate-300">xám</span>=tường, <span className="text-green-400">xanh lá</span>=hộp, <span className="text-rose-400">đỏ</span>=đã thấy đối thủ.</p>
               <p>Hộp = chướng ngại. <b className="text-white">ALBERT</b> được <b className="text-emerald-400">kéo & đẩy</b> hộp; <b className="text-blue-400">KAI</b> chỉ được <b className="text-emerald-400">đẩy</b>. ALBERT được <b className="text-amber-400">thưởng lần đầu nắm hộp</b> để học cách tận dụng hộp.</p>

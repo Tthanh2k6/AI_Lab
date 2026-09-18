@@ -23,6 +23,7 @@ function App() {
   const [configX, setConfigX] = useState<AIConfig | null>(null);
   const [configO, setConfigO] = useState<AIConfig | null>(null);
   const [initFromScratch, setInitFromScratch] = useState<boolean>(true);
+  const [caroTimeLimitMs, setCaroTimeLimitMs] = useState<number>(100);
 
   // Racing configuration state
   const [racingConfig, setRacingConfig] = useState<RacingConfig | null>(null);
@@ -57,10 +58,11 @@ function App() {
   const handleBackToSelect = () => setScreen('select');
   const handleBackToSetup  = () => setScreen('setup');
 
-  const handleLaunchCaroArena = (c1: AIConfig, c2: AIConfig, fromScratch: boolean) => {
+  const handleLaunchCaroArena = (c1: AIConfig, c2: AIConfig, fromScratch: boolean, timeLimitMs: number) => {
     setConfigX(c1);
     setConfigO(c2);
     setInitFromScratch(fromScratch);
+    setCaroTimeLimitMs(timeLimitMs);
     setScreen('caro-arena');
   };
 
@@ -131,6 +133,7 @@ function App() {
           initialConfigX={configX}
           initialConfigO={configO}
           initFromScratch={initFromScratch}
+          initialTimeLimitMs={caroTimeLimitMs}
           onBack={handleBackToSetup}
         />
       )}

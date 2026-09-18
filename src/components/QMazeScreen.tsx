@@ -13,8 +13,13 @@ const SPEEDS = [1, 5, 25, 150, 800];
 
 export default function QMazeScreen({ config, onBack }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const mazeRef = useRef<QMaze>(generateMaze(config.size));
-  const agentRef = useRef<QAgent>(createAgent(mazeRef.current));
+  // Mê cung + tác nhân khởi đầu chỉ được sinh đúng một lần (không sinh lại mỗi lần render)
+  const [initial] = useState(() => {
+    const maze = generateMaze(config.size);
+    return { maze, agent: createAgent(maze) };
+  });
+  const mazeRef = useRef<QMaze>(initial.maze);
+  const agentRef = useRef<QAgent>(initial.agent);
   const rafRef = useRef<number | null>(null);
   const runningRef = useRef(true);
   const speedRef = useRef(config.speed || 25);
@@ -23,7 +28,7 @@ export default function QMazeScreen({ config, onBack }: Props) {
   const [isRunning, setIsRunning] = useState(true);
   const [simSpeed, setSimSpeed] = useState(config.speed || 25);
   const [px, setPx] = useState(520);
-  const [stats, setStats] = useState({ episode: 1, steps: 0, epsilon: 1, rate: 0, best: 0, optimal: mazeRef.current.optimal });
+  const [stats, setStats] = useState({ episode: 1, steps: 0, epsilon: 1, rate: 0, best: 0, optimal: initial.maze.optimal });
 
   useEffect(() => {
     const measure = () => {

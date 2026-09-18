@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createWorld2, stepWorld2, SOCCER2, Soccer2World } from '../utils/soccer2';
 
 // Bản xem trước nhẹ: mô phỏng top-down 2D của đấu trường bóng đá đang học.
 export default function SoccerPreview({ size = 380, mutationRate = 0.1 }: { size?: number; mutationRate?: number }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const worldRef = useRef<Soccer2World>(createWorld2());
+  const [initialWorld] = useState<Soccer2World>(() => createWorld2());
+  const worldRef = useRef<Soccer2World>(initialWorld);
 
   useEffect(() => {
     const canvas = canvasRef.current;

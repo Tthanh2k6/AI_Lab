@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Play, Settings, ArrowLeft, RefreshCw, Brain } from 'lucide-react';
-import { AIConfig, AIAlgorithm, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, Soccer2Config, TagConfig, CellWarConfig } from '../types/game';
+import { AIConfig, AIAlgorithm, RacingConfig, FlappyConfig, Game2048Config, QMazeConfig, Connect4Config, SoccerConfig, TagConfig, CellWarConfig } from '../types/game';
 import { getZeroWeights } from '../utils/trainer';
 import { getPresetTrack } from '../utils/racingPhysics';
 import { generateTrack, parseSeed, randomSeed, seedToString } from '../utils/trackGen';
@@ -93,7 +93,7 @@ function CellWarPreview({ numFactions, sizeKey, size = 420 }: { numFactions: num
 interface SetupScreenProps {
   gameType: 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag' | 'cellwar';
   onBack: () => void;
-  onLaunchArena: (config1: AIConfig, config2: AIConfig, initFromScratch: boolean) => void;
+  onLaunchArena: (config1: AIConfig, config2: AIConfig, initFromScratch: boolean, timeLimitMs: number) => void;
   onLaunchRacing: (config: RacingConfig) => void;
   onLaunchFlappy: (config: FlappyConfig) => void;
   onLaunch2048: (config: Game2048Config) => void;
@@ -119,7 +119,7 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
   const [numCars, setNumCars] = useState<number>(100);
   const [numSensors, setNumSensors] = useState<number>(5);
   const [mutationRate, setMutationRate] = useState<number>(0.15); // 15%
-  const [speed, setSpeed] = useState<number>(1.2);
+  const [speed, setSpeed] = useState<number>(3.6); // px/frame — hiển thị ×10 thành km/h
   const [trackId, setTrackId] = useState<string>('procedural');
   const [enableFailureAvoidance, setEnableFailureAvoidance] = useState<boolean>(true);
   const [enablePlayerCar, setEnablePlayerCar] = useState<boolean>(false);
@@ -754,7 +754,6 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
       mctsSimulations: sims1,
       explorationConstant: explorationC,
       useTranspositionTable: true,
-      useBoundingBox: true,
       weights: baseWeights1
     };
 
@@ -764,11 +763,10 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
       mctsSimulations: sims2,
       explorationConstant: explorationC,
       useTranspositionTable: true,
-      useBoundingBox: true,
       weights: baseWeights2
     };
 
-    onLaunchArena(config1, config2, true);
+    onLaunchArena(config1, config2, true, timeLimit);
   };
 
   if (showTrackBuilder) {
@@ -1425,18 +1423,21 @@ export default function SetupScreen({ gameType, onBack, onLaunchArena, onLaunchR
                   {/* Cars Base Speed slider */}
                   <div className="setting-slider-group">
                     <div className="flex justify-between text-xs font-mono text-slate-400 mb-1">
-                      <span>Tốc Độ Chạy Cố Định Của Xe:</span>
-                      <span className="text-emerald-400 font-bold">{speed.toFixed(1)} px/frame</span>
+                      <span>Tốc Độ Cơ Bản Của Xe:</span>
+                      <span className="text-emerald-400 font-bold">{speed.toFixed(1)} px/frame (≈{Math.round(speed * 10)} km/h)</span>
                     </div>
                     <input
                       type="range"
-                      min="0.6"
-                      max="3.0"
+                      min="2.0"
+                      max="5.0"
                       step="0.2"
                       value={speed}
                       onChange={(e) => setSpeed(parseFloat(e.target.value))}
                       className="slider-styled slider-styled-emerald"
                     />
+                    <span className="text-[9px] text-slate-500 font-mono block mt-1">
+                      * Giai đoạn 1 xe chạy đúng tốc độ này; giai đoạn 2 AI tự điều tốc ±30%. Nhanh hơn = cua gắt khó ôm hơn.
+                    </span>
                   </div>
 
                   {/* Failure Avoidance toggle */}

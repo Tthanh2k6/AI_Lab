@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Play, Square, RefreshCw, Hash, Trophy, Activity, Bird as BirdIcon } from 'lucide-react';
-import { FlappyConfig } from '../types/game';
+import { FlappyConfig, NeuralNetworkType, NetworkLayer } from '../types/game';
 import { FLAPPY, FlappyBird, FlappyPipe, createPopulation, nextGeneration, stepWorld } from '../utils/flappy';
 import flappyBirdUrl from '../assets/FlappyBird.png';
 
@@ -12,11 +12,11 @@ interface FlappyScreenProps {
 const NET_INPUT_LABELS = ['cao độ', 'vận tốc', 'k/c ống', 'lệch khe'];
 
 // Vẽ mạng nơ-ron (nút + cạnh theo TRỌNG SỐ): xanh = dương, đỏ = âm, dày/đậm = lớn.
-function drawFlappyNet(ctx: CanvasRenderingContext2D, brain: any, W: number, H: number) {
+function drawFlappyNet(ctx: CanvasRenderingContext2D, brain: NeuralNetworkType, W: number, H: number) {
   ctx.clearRect(0, 0, W, H);
-  if (!brain?.layers?.length) return;
+  if (!brain.layers.length) return;
   const layers = brain.layers;
-  const counts = [layers[0].inputs, ...layers.map((l: any) => l.outputs)];
+  const counts = [layers[0].inputs, ...layers.map((l: NetworkLayer) => l.outputs)];
   const cols = counts.length;
   const colX = (i: number) => 64 + (i * (W - 128)) / (cols - 1);
   const nodeY = (count: number, idx: number) => {
@@ -373,17 +373,12 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
       }
 
       // Số cột đã vượt — pixel-art, giữa & trên màn (ẩn khi người chơi đã thua → để bảng thua hiện)
-      let showScore = 0;
       if (playerModeRef.current) {
-        if (!pl || !pl.alive) { /* đang thua/chờ-thua → không vẽ */ }
-        showScore = pl ? pl.score : 0;
+        if (pl && pl.alive) drawPixelNumber(ctx, pl.score, FLAPPY.WIDTH / 2, 28, 13);
       } else {
         let m = 0;
         for (const b of birdsRef.current) if (b.alive && b.score > m) m = b.score;
-        showScore = m;
-      }
-      if (!playerModeRef.current || (pl && pl.alive)) {
-        drawPixelNumber(ctx, showScore, FLAPPY.WIDTH / 2, 28, 13);
+        drawPixelNumber(ctx, m, FLAPPY.WIDTH / 2, 28, 13);
       }
 
       // Vẽ bộ não (mạng nơ-ron) của chim dẫn đầu sang panel bên
@@ -496,15 +491,15 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
   };
 
   // ── Chế độ tự chơi ──
-  const spawnPlayer = () => {
+  const spawnPlayer = useCallback(() => {
     playerRef.current = { y: FLAPPY.HEIGHT / 2, vy: 0, alive: true, score: 0 };
     pipesRef.current = []; // xóa ống → có ~3s bay trống mỗi lần vào/chơi lại
     playerWaitingRef.current = true; // chờ click đầu tiên mới rơi/bắt đầu
     setPlayerWaiting(true);
     setPlayerHud({ alive: true, score: 0 });
-  };
+  }, []);
 
-  const flapPlayer = () => {
+  const flapPlayer = useCallback(() => {
     if (!playerModeRef.current) return;
     const pl = playerRef.current;
     if (pl && pl.alive) {
@@ -516,7 +511,7 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
     } else {
       spawnPlayer(); // đã chết → bấm để chơi lại (vẫn chờ click kế tiếp mới bắt đầu)
     }
-  };
+  }, [spawnPlayer]);
 
   const togglePlayer = () => {
     const on = !playerModeRef.current;
@@ -546,7 +541,7 @@ export default function FlappyScreen({ config, onBack }: FlappyScreenProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [flapPlayer]);
 
   return (
     <div className="arena-container flex flex-col h-screen w-full">

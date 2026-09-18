@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Play, Square, RefreshCw, Hash, Trophy, Gamepad2, Cpu } from 'lucide-react';
 import { Game2048Config } from '../types/game';
 import Board2048 from './Board2048';
@@ -56,7 +56,9 @@ function AIThinkPanel({ scores }: { scores: DirScores }) {
 }
 
 export default function Game2048Screen({ config, onBack }: Props) {
-  const [tiles, setTiles] = useState<Tile[]>([]);
+  // Ván đầu tiên được tạo đúng một lần và dùng chung cho cả state hiển thị lẫn ref logic
+  const [initialTiles] = useState<Tile[]>(() => newGame());
+  const [tiles, setTiles] = useState<Tile[]>(initialTiles);
   const [hud, setHud] = useState({ score: 0, best: 0, max: 0 });
   const [isRunning, setIsRunning] = useState(true);
   const [simSpeed, setSimSpeed] = useState(config.speed || 2);
@@ -64,7 +66,7 @@ export default function Game2048Screen({ config, onBack }: Props) {
   const [gameOver, setGameOver] = useState(false);
   const [aiScores, setAiScores] = useState<DirScores>({ up: null, down: null, left: null, right: null });
 
-  const tilesRef = useRef<Tile[]>([]);
+  const tilesRef = useRef<Tile[]>(initialTiles);
   const busyRef = useRef(false);
   const runningRef = useRef(true);
   const playerModeRef = useRef(false);
@@ -73,10 +75,15 @@ export default function Game2048Screen({ config, onBack }: Props) {
   const scoreRef = useRef(0);
   const bestRef = useRef(0);
   const sinceRef = useRef(0);
+  // Timer của pha hoạt ảnh trượt / tự chơi lại — huỷ khi làm lại để ván cũ không ghi đè ván mới
+  const animTimerRef = useRef<number | undefined>(undefined);
+  const overTimerRef = useRef<number | undefined>(undefined);
 
   const [boardSize, setBoardSize] = useState(480);
 
-  const restart = () => {
+  const restart = useCallback(() => {
+    window.clearTimeout(animTimerRef.current);
+    window.clearTimeout(overTimerRef.current);
     tilesRef.current = newGame();
     scoreRef.current = 0;
     gameOverRef.current = false;
@@ -85,16 +92,16 @@ export default function Game2048Screen({ config, onBack }: Props) {
     setGameOver(false);
     setTiles(tilesRef.current);
     setHud(h => ({ score: 0, best: h.best, max: 0 }));
-  };
+  }, []);
 
-  const doMove = (dir: Dir) => {
+  const doMove = useCallback((dir: Dir) => {
     if (busyRef.current || gameOverRef.current) return;
     const plan = planMove(tilesRef.current, dir);
     if (!plan.moved) return;
     busyRef.current = true;
     scoreRef.current += plan.gained;
     setTiles(plan.slid);
-    window.setTimeout(() => {
+    animTimerRef.current = window.setTimeout(() => {
       const settled = plan.settled.map(t => ({ ...t }));
       spawnTile(settled);
       tilesRef.current = settled;
@@ -106,15 +113,13 @@ export default function Game2048Screen({ config, onBack }: Props) {
       if (!movesAvailable(settled)) {
         gameOverRef.current = true;
         if (playerModeRef.current) setGameOver(true);
-        else window.setTimeout(() => { if (!playerModeRef.current) restart(); }, 1600);
+        else overTimerRef.current = window.setTimeout(() => { if (!playerModeRef.current) restart(); }, 1600);
       } else if (playerModeRef.current) {
         // Tự chơi: hiển thị AI "đọc" thế cờ mới (gợi ý)
         setAiScores(moveScores(settled));
       }
     }, animFor(speedRef.current));
-  };
-  const doMoveRef = useRef(doMove);
-  doMoveRef.current = doMove;
+  }, [restart]);
 
   // Đo kích thước bàn theo cửa sổ
   useEffect(() => {
@@ -127,9 +132,8 @@ export default function Game2048Screen({ config, onBack }: Props) {
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  // Khởi tạo + vòng lặp AI tự chơi
+  // Vòng lặp AI tự chơi
   useEffect(() => {
-    restart();
     const id = window.setInterval(() => {
       if (busyRef.current || playerModeRef.current || !runningRef.current || gameOverRef.current) return;
       sinceRef.current += TICK;
@@ -138,11 +142,14 @@ export default function Game2048Screen({ config, onBack }: Props) {
       const sc = moveScores(tilesRef.current);
       setAiScores(sc);
       const dir = bestDirFromScores(sc);
-      if (dir) doMoveRef.current(dir);
+      if (dir) doMove(dir);
     }, TICK);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      clearInterval(id);
+      window.clearTimeout(animTimerRef.current);
+      window.clearTimeout(overTimerRef.current);
+    };
+  }, [doMove]);
 
   // Tự chơi bằng phím mũi tên / WASD
   useEffect(() => {
@@ -153,11 +160,11 @@ export default function Game2048Screen({ config, onBack }: Props) {
         KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right',
       };
       const dir = map[e.code];
-      if (dir) { e.preventDefault(); doMoveRef.current(dir); }
+      if (dir) { e.preventDefault(); doMove(dir); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [doMove]);
 
   const toggleRun = () => { runningRef.current = !runningRef.current; setIsRunning(runningRef.current); };
   const handleSpeed = (s: number) => { speedRef.current = s; setSimSpeed(s); };

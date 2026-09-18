@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Play, Square, RefreshCw, Trophy, Activity, Timer, Cpu } from 'lucide-react';
-import { Soccer2Config } from '../types/game';
+import { SoccerConfig } from '../types/game';
 import { createWorld2, stepWorld2, resetWorld2, secondsLeft2, Soccer2World, SOCCER2 } from '../utils/soccer2';
 import { Soccer2Renderer } from '../utils/renderSoccer2';
 
 interface Props {
-  config: Soccer2Config;
+  config: SoccerConfig;
   onBack: () => void;
 }
 
@@ -13,7 +13,9 @@ const SPEEDS = [1, 2, 4, 8, 50, 100];
 
 export default function Soccer2Screen({ config, onBack }: Props) {
   const wrapRef    = useRef<HTMLDivElement | null>(null);
-  const worldRef   = useRef<Soccer2World>(createWorld2());
+  // Thế giới (2 mạng nơ-ron) chỉ được tạo một lần, không tạo lại ở mỗi lần render
+  const [initialWorld] = useState<Soccer2World>(() => createWorld2());
+  const worldRef   = useRef<Soccer2World>(initialWorld);
   const rendererRef = useRef<Soccer2Renderer | null>(null);
   const rafRef     = useRef<number | null>(null);
   const runningRef = useRef(true);
@@ -24,7 +26,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
   const [isRunning, setIsRunning] = useState(true);
   const [simSpeed,  setSimSpeed]  = useState(config.speed || 2);
   const [stats, setStats] = useState({
-    generation: 1, time: secondsLeft2(worldRef.current),
+    generation: 1, time: Math.ceil(SOCCER2.MATCH_TICKS / 60),
     scoreOrange: 0, scoreBlue: 0,
     fitO: 0, fitB: 0,   // best fitness (kỷ lục)
     curO: 0, curB: 0,   // fitness ván hiện tại
@@ -266,7 +268,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
                 <div
                   className="h-full bg-gradient-to-r from-blue-400 to-cyan-400 transition-all duration-100"
                   style={{
-                    width: stats.orangeZ > 0.05 ? '100%' : stats.orangeJumpCd === 0 ? 100 : ((90 - stats.orangeJumpCd) / 90) * 100 + '%',
+                    width: stats.orangeZ > 0.05 ? '100%' : stats.orangeJumpCd === 0 ? '100%' : ((90 - stats.orangeJumpCd) / 90) * 100 + '%',
                     opacity: stats.orangeJumpCd === 0 && stats.orangeZ <= 0.05 ? 0.3 : 1
                   }}
                 />
@@ -329,7 +331,7 @@ export default function Soccer2Screen({ config, onBack }: Props) {
                 <div
                   className="h-full bg-gradient-to-r from-blue-400 to-cyan-400 transition-all duration-100"
                   style={{
-                    width: stats.blueZ > 0.05 ? '100%' : stats.blueJumpCd === 0 ? 100 : ((90 - stats.blueJumpCd) / 90) * 100 + '%',
+                    width: stats.blueZ > 0.05 ? '100%' : stats.blueJumpCd === 0 ? '100%' : ((90 - stats.blueJumpCd) / 90) * 100 + '%',
                     opacity: stats.blueJumpCd === 0 && stats.blueZ <= 0.05 ? 0.3 : 1
                   }}
                 />

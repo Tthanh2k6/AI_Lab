@@ -1,5 +1,7 @@
-import { Point } from '../types/game';
+import { Point, TrackTheme } from '../types/game';
 import { RacingTrack, buildTrackBoundaries, getIntersection, distancePointToPoint } from './racingPhysics';
+
+export type { TrackTheme };
 
 // ============================================================================
 // PROCEDURAL TRACK GENERATION — HỆ BLOCK TRÊN LƯỚI Ô
@@ -122,21 +124,6 @@ export function makeRingNoise(seed: number, octaves = 4): (t: number) => number 
 // ============================================================================
 // 3. BIOME — chọn "vùng khí hậu" bằng 2 bản đồ noise độc lập
 // ============================================================================
-
-export interface TrackTheme {
-  id: string;
-  name: string;
-  bg: string;
-  grid: string;
-  road: string;
-  roadEdge: string;
-  lane: string;
-  wallLeft: string;
-  wallRight: string;
-  glowLeft: string;
-  glowRight: string;
-  accent: string;
-}
 
 export const TRACK_THEMES: Record<string, TrackTheme> = {
   neon: {
@@ -439,7 +426,7 @@ function fixDiagonalPinches(region: Region, rng: Rng): void {
  * Vùng đã liên thông, không lỗ, không chạm chéo ⇒ mỗi nút biên có đúng bậc 2
  * ⇒ các cạnh biên ghép lại thành đúng MỘT chu trình đơn.
  */
-function traceContour(region: Region, cols: number, rows: number): GridCell[] | null {
+function traceContour(region: Region, cols: number): GridCell[] | null {
   const rRows = region.length;
   const rCols = region[0].length;
   const nodeId = (c: number, r: number) => r * cols + c;
@@ -1057,7 +1044,7 @@ export function generateTrack(opts: GenerateTrackOptions = {}): GeneratedTrack {
     if (area < total * 0.15 || area > total * 0.82) { reject('area'); continue; }
 
     // ── Biên vùng → chu trình ô lưới ──
-    const rawContour = traceContour(region, prof.cols, prof.rows);
+    const rawContour = traceContour(region, prof.cols);
     if (!rawContour) { reject('contour'); continue; }
     if (rawContour.length < 14) { reject('tooShort'); continue; }
 
@@ -1184,7 +1171,7 @@ function buildFallbackTrack(
   const region = makeRegion(rows, cols);
   for (let r = 1; r < rows - 1; r++) for (let c = 1; c < cols - 1; c++) region[r][c] = true;
 
-  const contour = traceContour(region, prof.cols, prof.rows)!;
+  const contour = traceContour(region, prof.cols)!;
   const verts = contourToVertices(contour, cell);
   const rng = mulberry32((seed ^ 0xdeadbeef) >>> 0);
   const { points, blocks } = verticesToCenterline(verts, rng, { ...prof, mixHairpin: 0.2, mixMedium: 0.4 }, cell)!;

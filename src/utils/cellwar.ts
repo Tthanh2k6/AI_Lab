@@ -70,8 +70,6 @@ export interface CellWarWorld {
   startTiles: number;    // tổng số ô
 }
 
-const idx = (w: { cols: number }, x: number, y: number) => y * w.cols + x;
-
 function seedPositions(cols: number, rows: number, n: number): { x: number; y: number }[] {
   // Rải thủ phủ quanh một vòng tròn để công bằng.
   const cx = (cols - 1) / 2, cy = (rows - 1) / 2;
@@ -218,7 +216,7 @@ function pickTarget(w: CellWarWorld, x: number, y: number, o: number, strat: Str
 }
 
 function attackStep(w: CellWarWorld) {
-  const { cols, rows, owner, troops } = w;
+  const { cols, owner, troops } = w;
   const count = Math.floor(w.n * CW.ATTACK_FRAC);
   for (let s = 0; s < count; s++) {
     const i = (Math.random() * w.n) | 0;

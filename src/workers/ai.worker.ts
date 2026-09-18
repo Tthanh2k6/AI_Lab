@@ -3,15 +3,22 @@ import { findBestMoveMinimax, getCandidateMoves } from '../utils/minimax';
 import { findBestMoveMCTS } from '../utils/mcts';
 import { evaluateBoard } from '../utils/evaluator';
 
+export interface SearchRequest {
+  requestId: number;
+  board: Board;
+  player: Player;
+  config: AIConfig;
+  currentHash: number;
+  timeLimitMs: number;
+}
+
+export type SearchResponse =
+  | { requestId: number; success: true; move: Move; metrics: SearchMetrics }
+  | { requestId: number; success: false; error: string };
+
 // Listen for messages from the main UI thread
-self.onmessage = (event: MessageEvent) => {
-  const { board, player, config, currentHash, timeLimitMs } = event.data as {
-    board: Board;
-    player: Player;
-    config: AIConfig;
-    currentHash: number;
-    timeLimitMs: number;
-  };
+self.onmessage = (event: MessageEvent<SearchRequest>) => {
+  const { requestId, board, player, config, currentHash, timeLimitMs } = event.data;
 
   const startTime = Date.now();
 
@@ -49,10 +56,10 @@ self.onmessage = (event: MessageEvent) => {
     } else if (config.algorithm === 'MCTS') {
       const result = findBestMoveMCTS(board, player, config, timeLimitMs);
       bestMove = result.move;
-      
+
       // Calculate a static board evaluation score for display in the dashboard
       const score = evaluateBoard(board, config.weights);
-      
+
       metrics = {
         nodesEvaluated: result.simulations, // For MCTS, nodes evaluated corresponds to simulations run
         maxDepthReached: Math.round(Math.log2(result.visits + 1)), // Proxy for tree depth
@@ -66,15 +73,14 @@ self.onmessage = (event: MessageEvent) => {
     }
 
     // Return search result back to main thread
-    self.postMessage({
-      success: true,
-      move: bestMove,
-      metrics
-    });
-  } catch (error: any) {
-    self.postMessage({
+    const response: SearchResponse = { requestId, success: true, move: bestMove, metrics };
+    self.postMessage(response);
+  } catch (error) {
+    const response: SearchResponse = {
+      requestId,
       success: false,
-      error: error.message || 'Error occurred in AI search'
-    });
+      error: error instanceof Error ? error.message : 'Error occurred in AI search'
+    };
+    self.postMessage(response);
   }
 };

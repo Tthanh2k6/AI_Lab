@@ -134,6 +134,40 @@ export function distancePointToPoint(p1: Point, p2: Point): number {
   return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
 }
 
+/**
+ * Nội suy Catmull-Rom qua các điểm điều khiển → đường cong mượt (liên tục G1 tại mọi điểm).
+ * - `closed = true`: chu trình khép kín, trả về n·samples điểm (không lặp lại điểm đầu ở cuối).
+ * - `closed = false`: đường hở, hai đầu được kẹp, trả về (n−1)·samples + 1 điểm (kết thúc đúng tại điểm cuối).
+ */
+export function catmullRom(ctrl: Point[], samples: number, closed: boolean): Point[] {
+  const n = ctrl.length;
+  if (n === 0) return [];
+  if (n === 1) return [{ ...ctrl[0] }];
+
+  const at = (i: number): Point =>
+    closed ? ctrl[((i % n) + n) % n] : ctrl[Math.max(0, Math.min(n - 1, i))];
+
+  const path: Point[] = [];
+  const segments = closed ? n : n - 1;
+  for (let i = 0; i < segments; i++) {
+    const p0 = at(i - 1);
+    const p1 = at(i);
+    const p2 = at(i + 1);
+    const p3 = at(i + 2);
+    for (let s = 0; s < samples; s++) {
+      const t = s / samples;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      path.push({
+        x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+        y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+      });
+    }
+  }
+  if (!closed) path.push({ ...ctrl[n - 1] });
+  return path;
+}
+
 // ============================================================================
 // TRACK DEFINITION AND GENERATION
 // ============================================================================
@@ -348,7 +382,7 @@ export function buildTrackBoundaries(centerLine: Point[], width: number | number
 
 // 3 Preset Tracks
 export function getPresetTrack(trackId: string, width = 65): RacingTrack {
-  let centerLine: Point[] = [];
+  let centerLine: Point[];
 
   const cx = 1100;
   const cy = 900;
@@ -376,25 +410,8 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       { x: 623,  y: 483  },  // L4 (rounded: was 650,480 → -27x)
       { x: 562,  y: 355  },  // top-left (rounded: was 550,350)
     ];
-    
-    // Interpolate S-Curve
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 12; s++) {
-        const t = s / 12;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+
+    centerLine = catmullRom(pts, 12, true);
 
   } else if (trackId === 'grandprix') {
     // Grand Prix F1 circuit: contains obtuse turns, hairpins, straight lines, no self-intersections
@@ -418,23 +435,7 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       { x: 700, y: 1350 },
       { x: 500, y: 1320 }
     ];
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 12; s++) {
-        const t = s / 12;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+    centerLine = catmullRom(pts, 12, true);
 
   } else if (trackId === 'monza') {
     // Monza GP Ultra-Chicane (Ý)
@@ -452,23 +453,7 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       { x: 1580, y: 1120 },{ x: 1640, y: 1260 },{ x: 1520, y: 1380 },
       { x: 1350, y: 1380 },{ x: 1180, y: 1400 }
     ];
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 10; s++) {
-        const t = s / 10;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+    centerLine = catmullRom(pts, 10, true);
 
   } else if (trackId === 'redbull') {
     // Red Bull Ring (Áo)
@@ -486,23 +471,7 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       { x: 1640, y: 1060 }, { x: 1500, y: 1140 },{ x: 1360, y: 1220 },
       { x: 1220, y: 1300 }
     ];
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 10; s++) {
-        const t = s / 10;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+    centerLine = catmullRom(pts, 10, true);
 
   } else if (trackId === 'shanghai') {
     // Shanghai International Circuit (Trung Quốc)
@@ -517,23 +486,7 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       { x: 1600, y: 940 },  { x: 1580, y: 1080 },{ x: 1460, y: 1140 },
       { x: 1320, y: 1100 }, { x: 1200, y: 1160 },{ x: 1100, y: 1200 }
     ];
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 10; s++) {
-        const t = s / 10;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+    centerLine = catmullRom(pts, 10, true);
 
   } else if (trackId === 'singapore') {
     // Singapore Marina Bay Street Circuit (Singapore) - Sửa lỗi và loại bỏ hoàn toàn các điểm giao nhau (no crossovers)
@@ -562,23 +515,7 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       { x: 1080, y: 1220 }, // T20-T21
       { x: 1020, y: 1260 }  // T22-T23 double fast left back to start
     ];
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 10; s++) {
-        const t = s / 10;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+    centerLine = catmullRom(pts, 10, true);
 
   } else {
     // Default 'oval': "Vòng cua Hoàn Mỹ" (Perfect curves, smooth oval loop with slight wobbles)
@@ -595,24 +532,7 @@ export function getPresetTrack(trackId: string, width = 65): RacingTrack {
       });
     }
 
-    // Interpolation
-    const path: Point[] = [];
-    const segments = pts.length;
-    for (let i = 0; i < segments; i++) {
-      const p0 = pts[(i - 1 + segments) % segments];
-      const p1 = pts[i];
-      const p2 = pts[(i + 1) % segments];
-      const p3 = pts[(i + 2) % segments];
-      for (let s = 0; s < 12; s++) {
-        const t = s / 12;
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
-        const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
-        path.push({ x, y });
-      }
-    }
-    centerLine = path;
+    centerLine = catmullRom(pts, 12, true);
   }
 
   const { leftWall, rightWall, checkpoints } = buildTrackBoundaries(centerLine, width, true);
@@ -653,6 +573,9 @@ export class CarInstance {
   vy: number;
   angle: number;
   speed: number;
+  /** Tốc độ cơ bản (px/frame) do người dùng cấu hình — giai đoạn 1 chạy đúng mức này */
+  baseSpeed: number;
+  /** Tốc độ tối đa có thể đạt ở giai đoạn hiện tại (dùng để chuẩn hoá input & fitness) */
   maxSpeed: number;
   friction: number;
   turnSpeed: number;
@@ -691,7 +614,7 @@ export class CarInstance {
     numSensors = 5,
     brain?: NeuralNetworkType,
     isPlayer = false,
-    maxSpeed = 4.2
+    baseSpeed = 3.6
   ) {
     this.x = x;
     this.y = y;
@@ -699,7 +622,8 @@ export class CarInstance {
     this.vy = 0;
     this.angle = angle;
     this.speed = 0;
-    this.maxSpeed = maxSpeed;
+    this.baseSpeed = baseSpeed;
+    this.maxSpeed = baseSpeed;
     this.friction = 0.05;
     this.turnSpeed = 0.045; // limit U-turns but enough for obtuse angles!
 
@@ -730,24 +654,23 @@ export class CarInstance {
     }
   }
 
-  // Update physical movements (fixed speed at 3.6px/frame or dynamic +/-30% in Phase 2, scaled by speedMultiplier)
+  // Update physical movements (fixed at baseSpeed in Phase 1, dynamic +/-30% around it in Phase 2, scaled by speedMultiplier)
   updatePhysics(steering: number, acceleration: number, isPhase2 = false, speedMultiplier = 1.0) {
-    if (this.crashed) return;
+    if (this.crashed || this.finished) return;
 
     // Increased turning capability to 0.08 radians/frame for great agility
     this.turnSpeed = 0.08;
 
     if (!isPhase2) {
-      // Phase 1: Fixed speed at exactly 3.6 px/frame (36 km/h display)
-      this.speed = 3.6 * speedMultiplier;
-      this.maxSpeed = 3.6 * speedMultiplier;
+      // Phase 1: Fixed speed at exactly baseSpeed (hiển thị ×10 km/h)
+      this.speed = this.baseSpeed * speedMultiplier;
+      this.maxSpeed = this.baseSpeed * speedMultiplier;
     } else {
-      // Phase 2: Variable speed, 3.6 px/frame base, +/-30%
-      // 3.6 * 0.3 = 1.08 px/frame variation.
-      // acceleration output is mapped from [-1, 1] to [-1.08, 1.08]
+      // Phase 2: Variable speed, baseSpeed +/-30%
+      // acceleration output is mapped from [-1, 1] to [-30%, +30%]
       const accelFactor = Math.max(-1, Math.min(1, acceleration));
-      this.speed = (3.6 + accelFactor * 1.08) * speedMultiplier;
-      this.maxSpeed = 4.68 * speedMultiplier; // 3.6 * 1.3 * speedMultiplier
+      this.speed = this.baseSpeed * (1 + accelFactor * 0.3) * speedMultiplier;
+      this.maxSpeed = this.baseSpeed * 1.3 * speedMultiplier;
     }
 
     // Force steering to 0 for the first 20 frames to let cars accelerate straight from start line
@@ -792,14 +715,12 @@ export class CarInstance {
 
       // Check intersections with all left/right walls
       let minOffset = 1;
-      let intersectPoint: Point | null = null;
 
       const walls = [...track.leftWall, ...track.rightWall];
       for (const wall of walls) {
         const intersect = getIntersection(p1, p2, wall.p1, wall.p2);
         if (intersect && intersect.offset < minOffset) {
           minOffset = intersect.offset;
-          intersectPoint = intersect;
         }
       }
 
@@ -847,7 +768,7 @@ export class CarInstance {
 
   // Crash detection & Checkpoint scoring
   checkCollisionAndCheckpoints(track: RacingTrack) {
-    if (this.crashed) return;
+    if (this.crashed || this.finished) return;
 
     // 1. Wall Collisions: check if car body polygon overlaps walls (always active to prevent clipping)
     const carPoly = this.getCarPolygon();
@@ -888,8 +809,10 @@ export class CarInstance {
       if (this.currentCheckpointIndex >= track.checkpoints.length) {
         this.lapCount = Math.floor(this.currentCheckpointIndex / track.checkpoints.length);
         if (this.currentCheckpointIndex >= track.checkpoints.length * 1.5) {
-          // Finish the trial after 1.5 laps to avoid infinite loops and declare victory!
+          // Finish the trial after 1.5 laps: the car parks so the generation can end
+          // (otherwise a good car would lap forever and evolution would never advance).
           this.finished = true;
+          this.speed = 0;
         }
       }
     } else {
@@ -919,7 +842,7 @@ export class CarInstance {
   }
 
   // Compute final fitness score (rewards both distance and speed, penalizing slow creeping)
-  getFitness(track: RacingTrack): number {
+  getFitness(): number {
     // Calculate average speed during the run
     const avgSpeed = this.totalDistanceTraveled / Math.max(1, this.timeAlive);
 
@@ -958,15 +881,12 @@ export interface OffspringInstance {
 export function evolveCarPopulation(
   currentCars: CarInstance[],
   mutationRate: number,
-  track: RacingTrack,
-  numSensors: number,
-  maxSpeed: number,
   isPhase2 = false
 ): { nextOffspring: OffspringInstance[]; eliteFitness: number; bestCarIndex: number } {
   // 1. Calculate fitness for all cars
   const scoredCars = currentCars.map((car, idx) => ({
     index: idx,
-    fitness: car.getFitness(track),
+    fitness: car.getFitness(),
     brain: car.brain
   }));
 
@@ -1010,30 +930,26 @@ export function evolveCarPopulation(
     const parentA = selectParent();
     const parentB = selectParent();
 
-    // Crossover
-    let childBrain = NeuralNetwork.crossover(parentA, parentB);
-
     // Mutation
-    let rateToUse = 0.06;
-    let mutationType: 'explorer' | 'stable' = 'stable';
+    let rateToUse: number;
+    let mutationType: 'explorer' | 'stable';
 
     if (isPhase2) {
       // Phase 2: Double the mutation rate, capped at 60%
       rateToUse = Math.min(0.60, mutationRate * 2);
       mutationType = 'explorer'; // all mutated offspring are exploring speed in Phase 2
+    } else if (nextOffspring.length - 2 < numExplorers) {
+      // Phase 1, explorer share (excluding the 2 elites): high mutation to explore past the failure point
+      rateToUse = 0.45;
+      mutationType = 'explorer';
     } else {
-      // Phase 1: Explorer vs Stable split
-      const spawnedSoFar = nextOffspring.length - 2; // excluding elites
-      if (spawnedSoFar < numExplorers) {
-        rateToUse = 0.45; // High mutation rate to explore past failure point
-        mutationType = 'explorer';
-      } else {
-        rateToUse = 0.06; // Low mutation rate to preserve stable driving line
-        mutationType = 'stable';
-      }
+      // Phase 1, stable share: low mutation to preserve the driving line
+      rateToUse = 0.06;
+      mutationType = 'stable';
     }
 
-    childBrain = NeuralNetwork.mutate(childBrain, rateToUse);
+    // Crossover + mutation
+    const childBrain = NeuralNetwork.mutate(NeuralNetwork.crossover(parentA, parentB), rateToUse);
 
     nextOffspring.push({
       brain: childBrain,

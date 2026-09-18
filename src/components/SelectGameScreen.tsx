@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gamepad2, Lock, Trophy, Sparkles, Cpu, ChevronRight } from 'lucide-react';
+import { Lock, Trophy, Sparkles, Cpu, ChevronRight } from 'lucide-react';
 
 interface GameCard {
   id: string;
@@ -97,10 +97,10 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
       id: 'tag',
       name: 'ĐUỔI BẮT AI 3D',
       vietnameseName: 'Đuổi Bắt 3D',
-      description: 'Phòng 3D kín với 4 trụ cột: AI đỏ (Chaser) tự học đuổi theo, AI xanh (Evader) tự học trốn tránh. Hai AI tiến hoá song song — đuổi bắt càng ngày càng trở nên khéo léo và căng thẳng hơn.',
+      description: 'KAI (xanh dương) tự học đuổi bắt, ALBERT (cam) tự học trốn tránh qua 6 phòng 3D khác nhau: hộp kéo/đẩy, tường chắn, cột trụ. Hai quần thể AI tiến hoá song song, huấn luyện ngầm ngay trong lúc xem — đuổi bắt càng ngày càng khéo léo.',
       size: 'Phòng 3D kín',
       active: true,
-      algorithms: ['Mạng nơ-ron', 'Tiến hóa di truyền', 'Đối kháng cùng lúc'],
+      algorithms: ['Mạng nơ-ron', 'Tiến hóa quần thể', 'Raycast 8 hướng'],
       difficulty: 'Lập trình: Rất khó',
       imageGlow: 'from-red-500/20 to-green-500/20'
     },
@@ -139,7 +139,7 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
           <div
             key={game.id}
             onClick={game.active ? () => onSelectGame(game.id as 'caro' | 'racing' | 'flappy' | '2048' | 'qmaze' | 'connect4' | 'soccer' | 'tag' | 'cellwar') : undefined}
-            className={`glass-panel game-card relative overflow-hidden p-8 flex flex-col justify-between h-[340px] cursor-pointer ${
+            className={`glass-panel game-card relative overflow-hidden p-8 flex flex-col justify-between min-h-[340px] cursor-pointer ${
               game.active ? 'glow-border-purple' : 'opacity-70'
             }`}
             style={{
@@ -217,7 +217,7 @@ export default function SelectGameScreen({ onSelectGame }: { onSelectGame: (game
 
       {/* Footer Info */}
       <div className="mt-16 text-center text-xs text-slate-500 font-mono">
-        <p>AI Arena v1.0.0 • Phát triển bởi Tran Trung Thanh</p>
+        <p>AI Game Arena v1.5.11 • Phát triển bởi Tran Trung Thanh</p>
       </div>
     </div>
   );

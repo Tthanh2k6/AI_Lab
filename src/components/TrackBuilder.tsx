@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft, Save, Upload, Zap, Trash2, RotateCcw } from 'lucide-react';
 import { Point } from '../types/game';
-import { RacingTrack, buildTrackBoundaries } from '../utils/racingPhysics';
+import { RacingTrack, buildTrackBoundaries, catmullRom } from '../utils/racingPhysics';
 
 interface TrackBuilderProps {
   onBack: () => void;
@@ -32,15 +32,6 @@ function ptsBez(p1: Point, p2: Point, cp: Point, n: number): Point[] {
   return r;
 }
 
-function ptsLin(p1: Point, p2: Point, n: number): Point[] {
-  const r: Point[] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    r.push({ x: p1.x + (p2.x - p1.x)*t, y: p1.y + (p2.y - p1.y)*t });
-  }
-  return r;
-}
-
 function buildCL(segs: Segment[], closed: boolean): Point[] {
   if (!segs.length) return [];
 
@@ -56,27 +47,12 @@ function buildCL(segs: Segment[], closed: boolean): Point[] {
       ctrl.push({ x: seg.cp.x * 0.65 + mid.x * 0.35, y: seg.cp.y * 0.65 + mid.y * 0.35 });
     }
   }
+  // Đường còn hở: điểm cuối của đoạn cuối cùng cũng là điểm điều khiển, nếu không đoạn
+  // vừa vẽ sẽ biến mất. Khi đã đóng vòng thì điểm đó trùng điểm xuất phát nên bỏ qua
+  // (thêm vào sẽ sinh một đoạn thừa quay ngược về điểm đầu).
+  if (!closed) ctrl.push(segs[segs.length - 1].p2);
 
-  const n = ctrl.length;
-  const PPS = 12;
-  const path: Point[] = [];
-
-  for (let i = 0; i < n; i++) {
-    const p0 = ctrl[(i - 1 + n) % n];
-    const p1 = ctrl[i];
-    const p2 = ctrl[(i + 1) % n];
-    const p3 = ctrl[(i + 2) % n];
-    const isLast = i === n - 1;
-
-    for (let s = (i === 0 ? 0 : 1); s <= (isLast && closed ? PPS - 1 : PPS); s++) {
-      const t = s / PPS, t2 = t * t, t3 = t2 * t;
-      path.push({
-        x: 0.5 * ((2*p1.x) + (-p0.x+p2.x)*t + (2*p0.x-5*p1.x+4*p2.x-p3.x)*t2 + (-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
-        y: 0.5 * ((2*p1.y) + (-p0.y+p2.y)*t + (2*p0.y-5*p1.y+4*p2.y-p3.y)*t2 + (-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
-      });
-    }
-  }
-  return path;
+  return catmullRom(ctrl, 12, closed);
 }
 
 function dist(a: Point, b: Point) { return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2); }

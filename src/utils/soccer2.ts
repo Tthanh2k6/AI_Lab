@@ -283,7 +283,6 @@ function kickSkill(p: Soccer2Player, ball: Soccer2Ball, w: Soccer2World) {
 
 function pushBall(p: Soccer2Player, ball: Soccer2Ball, w: Soccer2World) {
   const dx = ball.x - p.x, dy = ball.y - p.y;
-  const dist = Math.hypot(dx, dy);
   // Kiểm tra tiếp xúc 3D: khoảng cách ngang + độ cao
   const horizDist = Math.hypot(dx, dy);
   const pCenterZ  = p.z + SOCCER2.PLAYER_R; // tâm thật của cube theo chiều đứng

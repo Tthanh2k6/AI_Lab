@@ -231,8 +231,8 @@ function alphabeta(
   }).sort((a, b) => b.score - a.score);
 
   let bestMove: Move | null = null;
-  let originalAlpha = alpha;
-  let originalBeta = beta;
+  const originalAlpha = alpha;
+  const originalBeta = beta;
 
   if (isMaximizing) {
     let maxEval = -Infinity;

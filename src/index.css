@@ -1,4 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+/* Tailwind cung cấp các utility (px-*, rounded-*, text-[..], sr-only/peer...) mà các
+   component đang dùng. Mọi rule bên dưới KHÔNG nằm trong @layer nên luôn thắng
+   utility của Tailwind — các tinh chỉnh màu (purple → xanh cobalt...) vẫn giữ nguyên. */
+@import "tailwindcss";
 
 :root {
   --bg-deep: #0b0d13;
@@ -93,7 +97,7 @@ main {
 .h-full { height: 100%; }
 .relative { position: relative; }
 .absolute { position: absolute; }
-.overflow-hidden { overflow-hidden: hidden; }
+.overflow-hidden { overflow: hidden; }
 .d-none { display: none; }
 
 /* Gap & Margins & Paddings */

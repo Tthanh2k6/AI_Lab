@@ -47,7 +47,6 @@ export function findBestMoveMCTS(
   timeLimitMs: number = 100
 ): { move: Move; visits: number; simulations: number; timeSpent: number } {
   const startTime = Date.now();
-  const opponent: Player = player === 'X' ? 'O' : 'X';
 
   // 1. Initialize root node
   const initialMoves = getCandidateMoves(board, 1);

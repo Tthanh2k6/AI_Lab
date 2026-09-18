@@ -19,7 +19,9 @@ export default function CellWarScreen({ config, onBack }: Props) {
   const wrapRef    = useRef<HTMLDivElement | null>(null);
   const canvasRef  = useRef<HTMLCanvasElement | null>(null);
   const offRef     = useRef<HTMLCanvasElement | null>(null);
-  const worldRef   = useRef<CellWarWorld>(createCellWar(config.numFactions, config.mapSize, config.growthRate));
+  // Bản đồ khởi đầu chỉ được cấp phát một lần (không tạo lại ở mỗi lần render)
+  const [initialWorld] = useState<CellWarWorld>(() => createCellWar(config.numFactions, config.mapSize, config.growthRate));
+  const worldRef   = useRef<CellWarWorld>(initialWorld);
   const rafRef     = useRef<number | null>(null);
   const runningRef = useRef(true);
   const speedRef   = useRef(config.speed ?? 4);
@@ -27,7 +29,7 @@ export default function CellWarScreen({ config, onBack }: Props) {
 
   const [isRunning, setIsRunning] = useState(true);
   const [simSpeed, setSimSpeed]   = useState(config.speed ?? 4);
-  const [stats, setStats] = useState(() => snapshot(worldRef.current));
+  const [stats, setStats] = useState(() => snapshot(initialWorld));
 
   function snapshot(w: CellWarWorld) {
     const total = w.startTiles;

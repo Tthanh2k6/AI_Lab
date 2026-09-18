@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TAG, TagWorld, TagCube, TagPlayer, computeVision, VisionRay } from './tagGame';
+import { TAG, TagWorld, computeVision, VisionRay } from './tagGame';
 
 // ============================================================================
 // TAG RENDERER v2 — Phong cách Albert/Kai

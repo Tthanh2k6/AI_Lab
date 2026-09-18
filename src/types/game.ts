@@ -1,3 +1,5 @@
+import type { RacingTrack } from '../utils/racingPhysics';
+
 export type Player = 'X' | 'O';
 export type Cell = Player | null;
 export type Board = Cell[][];
@@ -32,7 +34,6 @@ export interface AIConfig {
   mctsSimulations: number;        // For MCTS
   explorationConstant: number;    // For MCTS UCT (C constant)
   useTranspositionTable: boolean; // Enable/Disable Zobrist TT
-  useBoundingBox: boolean;        // Restrict search near existing stones
   weights: HeuristicWeights;      // Adjustable / Evolving weights
 }
 
@@ -103,11 +104,12 @@ export interface RacingConfig {
   numCars: number;
   numSensors: number;
   mutationRate: number;
-  speed: number; // constant speed
+  /** Tốc độ cơ bản của xe (px/frame). Giai đoạn 1 chạy đúng tốc độ này, giai đoạn 2 dao động ±30% quanh nó. */
+  speed: number;
   trackId: string; // 'oval' | 'scurve' | 'grandprix' | 'procedural' | 'custom'
   enableFailureAvoidance: boolean;
   enablePlayerCar: boolean;
-  customTrack?: any;
+  customTrack?: RacingTrack;
   /** Seed của map thủ tục (chỉ dùng khi trackId === 'procedural') */
   trackSeed?: number;
   /** Độ khó địa hình 1..5 (chỉ dùng khi trackId === 'procedural') */
@@ -157,15 +159,6 @@ export interface Connect4Config {
 export interface SoccerConfig {
   mutationRate: number; // tỉ lệ đột biến khi tiến hoá (0..1)
   speed: number;        // số tick mô phỏng mỗi khung hình (1..8) — tua nhanh quá trình học
-}
-
-// ============================================================================
-// SOCCER 2 — Dẫn bóng + Kỹ năng sút + Va chạm cứng
-// ============================================================================
-
-export interface Soccer2Config {
-  mutationRate: number;
-  speed: number;
 }
 
 // ============================================================================

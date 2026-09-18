@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RefreshCw, Save, Download, ArrowLeft, Brain, User, Zap, Sparkles, Eye, Trophy, AlertTriangle } from 'lucide-react';
 import { RacingConfig, Point, NeuralNetworkType } from '../types/game';
-import { RacingTrack, CarInstance, getPresetTrack, evolveCarPopulation, distancePointToPoint, OffspringInstance } from '../utils/racingPhysics';
+import { RacingTrack, CarInstance, getPresetTrack, evolveCarPopulation, OffspringInstance } from '../utils/racingPhysics';
 import { generateTrack, randomSeed } from '../utils/trackGen';
 
 interface RacingScreenProps {
@@ -34,7 +34,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
   // Config state
   const [numCars] = useState<number>(config.numCars);
   const [numSensors] = useState<number>(config.numSensors);
-  const [mutationRate, setMutationRate] = useState<number>(config.mutationRate);
+  const [mutationRate] = useState<number>(config.mutationRate);
   const [baseSpeed] = useState<number>(config.speed);
   
   // Track state
@@ -101,18 +101,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
   
   // Camera scroll target coordinates
   const cameraRef = useRef({ x: 0, y: 0 });
-
-  // Sync trackRef whenever track state changes and snap camera to new track center.
-  // This runs BEFORE the initPopulation useEffect so trackRef is already up-to-date when cars spawn.
-  useEffect(() => {
-    trackRef.current = track;
-    const pts = track.centerLine;
-    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-    cameraRef.current = { x: cx, y: cy };
-    // Map mới có thể to nhỏ khác hẳn map cũ → chỉnh lại mức phóng cho vừa khung
-    setZoomLevel(fitZoom(track));
-  }, [track]);
+  // Frame counter for throttling React state updates from the render loop
+  const frameRef = useRef(0);
 
   // --------------------------------------------------------------------------
   // RESET THE POPULATION (Next generation or initial start)
@@ -126,7 +116,6 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
       const brain = off ? off.brain : undefined;
       const mutType = off ? off.mutationType : (i === 0 ? 'elite' : 'explorer');
 
-      const maxSp = baseSpeed * 2.8 + (Math.random() * 0.6 - 0.3);
       const car = new CarInstance(
         t.startPoint.x,
         t.startPoint.y,
@@ -134,7 +123,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
         numSensors,
         brain,
         false,
-        maxSp
+        baseSpeed
       );
       car.mutationType = mutType;
       cars.push(car);
@@ -149,27 +138,25 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
         numSensors,
         undefined,
         true,
-        baseSpeed * 3.0
+        baseSpeed
       );
       pCar.mutationType = 'player';
       playerCarRef.current = pCar;
     } else {
       playerCarRef.current = null;
     }
-    // Camera is handled by the trackRef sync useEffect above
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numCars, numSensors, baseSpeed, enablePlayerCar]);
 
-  // Initial populate
+  // Sync trackRef + camera and (re)spawn the population whenever the track changes.
+  // Counters and zoom are reset by regenerateTrack() — the only place a new track is
+  // set after mount — so this effect never has to touch React state.
   useEffect(() => {
+    trackRef.current = track;
+    const pts = track.centerLine;
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    cameraRef.current = { x: cx, y: cy };
     initPopulation();
-    setCrashMarkers([]);
-    setGeneration(0);
-    setHighestFitness(0);
-    setEliteHistory([]);
-    setBestLapTime(Infinity);
-    setLapRecord('N/A');
-    setIsPhase2(false);
   }, [track, initPopulation]);
 
   // Keyboard listeners for player car
@@ -198,10 +185,19 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
     };
   }, [enablePlayerCar]);
 
+  /** Tự hủy mọi xe còn chạy để tiến hóa ngay sang thế hệ kế tiếp. */
+  const handleForceNextGeneration = useCallback(() => {
+    carsRef.current.forEach(car => {
+      if (!car.crashed) {
+        car.crashed = true;
+        car.speed = 0;
+      }
+    });
+  }, []);
+
   // --------------------------------------------------------------------------
   // EVOLUTION AND PHYSICS MAIN LOOP
   // --------------------------------------------------------------------------
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let animationId: number;
 
@@ -235,8 +231,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           setIsPhase2(true);
         }
 
-        // Update player car first
-        if (pCar && !pCar.crashed) {
+        // Update player car first (a finished car has parked and no longer holds up the generation)
+        if (pCar && !pCar.crashed && !pCar.finished) {
           allCrashed = false;
           let steer = 0;
           if (playerKeys.current.a) steer = -1;
@@ -257,23 +253,24 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           }
         }
 
-        // Update AI cars
+        // Update AI cars (crashed or finished cars are parked)
         carsRef.current.forEach((car, index) => {
-          if (!car.crashed) {
+          if (!car.crashed && !car.finished) {
             allCrashed = false;
             
-            // Check if car finished
+            car.updateSensors(t, curCrashMarkers, enableFailureAvoidance);
+            car.think(phase2Triggered, speedMultiplier);
+            car.checkCollisionAndCheckpoints(t);
+
+            // Vừa cán đích (1.5 vòng) → ghi nhận kỷ lục nếu nhanh hơn; xe dừng lại từ đây
             if (car.finished) {
               const lapSecs = car.timeAlive / 60;
               if (lapSecs < bestLapTime) {
                 setBestLapTime(lapSecs);
                 setLapRecord(`AI #${index} (${lapSecs.toFixed(2)}s)`);
               }
+              return;
             }
-
-            car.updateSensors(t, curCrashMarkers, enableFailureAvoidance);
-            car.think(phase2Triggered, speedMultiplier);
-            car.checkCollisionAndCheckpoints(t);
 
             // Active Speed Optimization early-termination check when crossing start line
             if (car.lapCount === 1 && car.currentCheckpointIndex === t.checkpoints.length) {
@@ -305,12 +302,9 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
 
         // Trigger Genetic natural selection if everyone crashed
         if (allCrashed) {
-          const { nextOffspring, eliteFitness, bestCarIndex } = evolveCarPopulation(
+          const { nextOffspring, eliteFitness } = evolveCarPopulation(
             carsRef.current,
             mutationRate,
-            t,
-            numSensors,
-            baseSpeed,
             phase2Triggered
           );
 
@@ -357,11 +351,9 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
 
           // Calculate Leading Car (Elite) to lock camera
           let leader = carsRef.current[0];
-          let leaderIdx = 0;
-          carsRef.current.forEach((car, idx) => {
+          carsRef.current.forEach(car => {
             if (!car.crashed && car.totalDistanceTraveled > leader.totalDistanceTraveled) {
               leader = car;
-              leaderIdx = idx;
             }
           });
 
@@ -369,7 +361,6 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           const pCar = playerCarRef.current;
           if (pCar && !pCar.crashed && (leader.crashed || pCar.totalDistanceTraveled > leader.totalDistanceTraveled)) {
             leader = pCar;
-            leaderIdx = -99; // code for player
           }
 
           // Update Camera smoothly
@@ -519,7 +510,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           ctx.shadowBlur = 0;
 
           // 6. Draw AI Cars with premium color logic
-          carsRef.current.forEach((car, index) => {
+          carsRef.current.forEach(car => {
             if (car.crashed) return;
 
             const isLeader = car === leader;
@@ -536,7 +527,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
                 ctx.shadowColor = '#e879f9';
                 ctx.shadowBlur = 12;
                 ctx.fillStyle = '#e879f9'; // bright magenta leader
-              } else if (car.speed > 3.65 * speedMultiplier) {
+              } else if (car.speed > car.baseSpeed * speedMultiplier * 1.01) {
                 ctx.shadowColor = '#f472b6';
                 ctx.shadowBlur = 8;
                 ctx.fillStyle = '#f472b6'; // bright pink for accelerating cars
@@ -618,12 +609,14 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           // Restore transforms
           ctx.restore();
 
-          // 8. Capture Leading Car Telemetry for Neural Net Drawing
-          if (leader) {
+          // 8. Capture Leading Car Telemetry for Neural Net Drawing.
+          // Throttled to every 4th frame — one state update per frame re-rendered the whole screen at 60fps.
+          frameRef.current++;
+          if (leader && frameRef.current % 4 === 0) {
             setLeadingCarTelemetry({
               speed: leader.speed,
               checkpoints: leader.currentCheckpointIndex,
-              fitness: Math.round(leader.getFitness(t)),
+              fitness: Math.round(leader.getFitness()),
               timeAlive: leader.timeAlive,
               lap: leader.lapCount,
               inputs: leader.sensorInputs,
@@ -644,7 +637,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
     };
   // track and crashMarkers are intentionally omitted — the loop reads them from refs (trackRef/crashMarkersRef)
   // to prevent the RAF loop from being cancelled+restarted on every track switch or car crash.
-  }, [isPaused, simSpeed, followMode, zoomLevel, baseSpeed, mutationRate, numSensors, enableFailureAvoidance, bestLapTime, isPhase2, speedMultiplier, speedOptimized, initPopulation]);
+  }, [isPaused, simSpeed, followMode, zoomLevel, mutationRate, enableFailureAvoidance, bestLapTime, isPhase2, speedMultiplier, speedOptimized, initPopulation, handleForceNextGeneration]);
 
   // --------------------------------------------------------------------------
   // USER ACTIONS
@@ -658,6 +651,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
     // Always switch: setTrack triggers the trackRef sync effect (no loop restart) and initPopulation effect
     crashMarkersRef.current = [];
     setTrack(nextTrack);
+    setZoomLevel(fitZoom(nextTrack)); // map mới có thể to nhỏ khác hẳn map cũ → phóng lại cho vừa khung
     setCrashMarkers([]);
     setGeneration(0);
     setHighestFitness(0);
@@ -686,20 +680,11 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
     setIsPhase2(false);
   };
 
-  const handleForceNextGeneration = () => {
-    carsRef.current.forEach(car => {
-      if (!car.crashed) {
-        car.crashed = true;
-        car.speed = 0;
-      }
-    });
-  };
-
   const handleUpgradeSpeed = () => {
     if (!speedOptimized) return;
     setSpeedMultiplier(prev => {
       const nextMul = prev * 1.15;
-      alert(`Đã nâng giới hạn tốc độ tối đa lên 15%! Vận tốc tối đa mới: ${(4.68 * nextMul * 10).toFixed(1)} km/h. AI đang tiến hành tối ưu hóa!`);
+      alert(`Đã nâng giới hạn tốc độ tối đa lên 15%! Vận tốc tối đa mới: ${(baseSpeed * 1.3 * nextMul * 10).toFixed(1)} km/h. AI đang tiến hành tối ưu hóa!`);
       return nextMul;
     });
     setSpeedOptimized(false);
@@ -719,7 +704,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(brainJson);
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `racing_brain_gen_${generation}_fit_${Math.round(leader.getFitness(track))}.json`);
+    downloadAnchor.setAttribute('download', `racing_brain_gen_${generation}_fit_${Math.round(leader.getFitness())}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -747,7 +732,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
           } else {
             alert('Định dạng tệp không khớp với Mạng Nơ-ron.');
           }
-        } catch (err) {
+        } catch {
           alert('Không thể đọc tệp cấu hình.');
         }
       };
@@ -807,13 +792,11 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
 
           return layer.map((node, nIdx) => {
             return nextLayer.map((nextNode, nextIdx) => {
-              // Weight strength styling
-              let wVal = 0;
-              if (lIdx === 0 && weights && weights[nextIdx] && weights[nextIdx][nIdx] !== undefined) {
-                wVal = weights[nextIdx][nIdx];
-              } else {
-                wVal = Math.sin(nIdx * nextIdx + lIdx) * 0.8; // mock weights for layer 2
-              }
+              // Weight strength styling. Only the input→hidden weights are in the telemetry;
+              // the hidden→output layer is drawn with a fixed decorative pattern.
+              const wVal = (lIdx === 0 && weights?.[nextIdx]?.[nIdx] !== undefined)
+                ? weights[nextIdx][nIdx]
+                : Math.sin(nIdx * nextIdx + lIdx) * 0.8;
 
               const isPositive = wVal > 0;
               const strokeColor = isPositive ? 'rgba(6, 182, 212, ' : 'rgba(236, 72, 153, '; // Cyan vs Pink
@@ -839,11 +822,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
         {nodeCoords.map((layer, lIdx) => {
           return layer.map((node, nIdx) => {
             let activeGlow = false;
-            let nodeVal = 0;
-
             if (lIdx === 0 && inputs[nIdx] !== undefined) {
-              nodeVal = inputs[nIdx];
-              activeGlow = nodeVal > 0.45;
+              activeGlow = inputs[nIdx] > 0.45;
             } else if (lIdx === layers.length - 1) {
               activeGlow = true; // outputs always light up
             }
@@ -862,7 +842,8 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
                     fill="transparent"
                     stroke={fillCol}
                     strokeWidth={1.5}
-                    style={{ opacity: 0.6, transformOrigin: `${node.x}px ${node.y}px`, animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite' }}
+                    className="animate-ping"
+                    style={{ opacity: 0.6, transformOrigin: `${node.x}px ${node.y}px` }}
                   />
                 )}
                 <circle
@@ -939,9 +920,9 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
               {isPhase2 ? 'GIAI ĐOẠN 2: TỐI ƯU TỐC ĐỘ (RACING OPTIMIZATION)' : 'GIAI ĐOẠN 1: DÒ ĐƯỜNG ĐUA (PATH EXPLORATION)'}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              {isPhase2 
-                ? 'Đã có xe hoàn thành 1 vòng đua! Hệ thống tự thích ứng tốc độ ±30% (25.2 - 46.8 km/h) hoạt động & Nhân đôi hệ số đột biến gen!' 
-                : `Xe duy trì tốc độ cố định 36km/h. Đang phân bổ di truyền: ${Math.round(mutationRate * 100)}% xe Thám Hiểm (đột biến 45%) dò đường cua mới, ${Math.round((1 - mutationRate) * 100)}% xe Ổn Định (đột biến 6%).`}
+              {isPhase2
+                ? `Đã có xe hoàn thành 1 vòng đua! Hệ thống tự thích ứng tốc độ ±30% (${(baseSpeed * 0.7 * speedMultiplier * 10).toFixed(1)} - ${(baseSpeed * 1.3 * speedMultiplier * 10).toFixed(1)} km/h) hoạt động & Nhân đôi hệ số đột biến gen!`
+                : `Xe duy trì tốc độ cố định ${(baseSpeed * speedMultiplier * 10).toFixed(1)} km/h. Đang phân bổ di truyền: ${Math.round(mutationRate * 100)}% xe Thám Hiểm (đột biến 45%) dò đường cua mới, ${Math.round((1 - mutationRate) * 100)}% xe Ổn Định (đột biến 6%).`}
             </div>
           </div>
         </div>
@@ -1057,7 +1038,7 @@ export default function RacingScreen({ config, onBack }: RacingScreenProps) {
               ref={canvasRef}
               width={CANVAS_W}
               height={CANVAS_H}
-              className="max-w-full aspect-video border border-slate-900 rounded-xl shadow-2xl"
+              className="max-w-full h-auto border border-slate-900 rounded-xl shadow-2xl"
             />
 
             {/* Active details */}

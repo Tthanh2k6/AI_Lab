@@ -265,7 +265,7 @@ export default function Connect4Screen({ config, onBack }: Props) {
           className={`rounded-xl border border-slate-700/50 shadow-2xl ${playerMode ? 'cursor-pointer' : ''}`}
           style={{ width: size, height: canvasH, background: '#0b1220' }}
         />
-        {statusRef.current === 'over' && playerMode && (
+        {statusText !== '' && playerMode && (
           <button onClick={reset} className="cyber-btn cyber-btn-emerald py-2 px-5 text-xs flex items-center gap-2">
             <RefreshCw className="w-4 h-4" /> VÁN MỚI
           </button>

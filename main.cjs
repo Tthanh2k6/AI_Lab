@@ -12,8 +12,7 @@ function createWindow() {
       contextIsolation: true
     },
     autoHideMenuBar: true,
-    title: "AI Game Arena - Caro 20x20 Training Visualizer",
-    icon: path.join(__dirname, 'public/vite.svg') // fallback icon
+    title: "AI Game Arena"
   });
 
   const isDev = !app.isPackaged;

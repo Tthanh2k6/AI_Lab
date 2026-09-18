@@ -36,7 +36,7 @@ export function drawConnect4(ctx: CanvasRenderingContext2D, board: Board, size: 
   const r = Math.round(cell * 0.18);
   ctx.fillStyle = '#1e40af';
   ctx.beginPath();
-  if ((ctx as any).roundRect) (ctx as any).roundRect(0, top, width, ROWS * cell, r);
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(0, top, width, ROWS * cell, r);
   else ctx.rect(0, top, width, ROWS * cell);
   ctx.fill();
 
