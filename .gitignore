@@ -13,6 +13,16 @@ dist-ssr
 release
 *.local
 
+# Android (android/)
+android/.gradle/
+android/build/
+android/*/build/
+android/local.properties
+android/.kotlin/
+android/.idea/
+android/*.iml
+android/captures/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

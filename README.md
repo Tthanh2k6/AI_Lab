@@ -195,6 +195,12 @@ Dưới đây là danh sách các lệnh thực thi có sẵn trong `package.jso
 
 ---
 
+## 📱 Tác nhân Android (thư mục `android/`)
+
+Hướng phát triển mới của dự án: một app Android chạy **hoàn toàn trên điện thoại** (Android 16, không root), đọc màn hình game bằng chụp màn hình và tự tap để chơi — bắt đầu với Flappy Bird, nhận diện theo cấu trúc chung của thể loại nên dùng được cho nhiều bản clone. Lõi thị giác + điều khiển viết bằng Kotlin thuần và được nghiệm thu bằng mô phỏng nhiều skin (không cần điện thoại); phần web ở trên vẫn là phòng lab mô phỏng. Xem [android/README.md](android/README.md) để build, cài và chạy.
+
+---
+
 ## 📜 Giấy phép & Bản quyền
 
 Dự án được xây dựng phục vụ cho mục đích học tập, nghiên cứu và trực quan hóa các thuật toán trí tuệ nhân tạo.
