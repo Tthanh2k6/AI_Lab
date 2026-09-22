@@ -71,6 +71,13 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
         val blobMinCount: Int = 20,
         val blobMinDensity: Double = 0.22,
         val angleHistory: Int = 6,
+        /** Tỉ lệ cao/rộng của khung bao địch (nhân vật Mr Gun gần vuông vì cầm súng ngang). */
+        val enemyMinAspect: Double = 0.7,
+        val enemyMaxAspect: Double = 4.5,
+        /** Số khung giữ địch cũ khi tạm mất (vạch ngắm cắt ngang, nhấp nháy). */
+        val enemyHoldFrames: Int = 30,
+        /** Bán kính che vạch ngắm quanh tâm xoay (tỉ lệ chiều cao): chỉ phần gốc gần tâm mới "đứng yên". */
+        val lineMaskRadiusFrac: Double = 0.15,
         /** Góc nhảy quá mức này giữa 2 khung → gián đoạn (lượt mới không bắt được chuyển cảnh), không phải đảo chiều. */
         val maxStepDeg: Double = 20.0,
         /** Góc quan sát vượt biên đã học quá mức này → biên sai, bỏ xác nhận. */
@@ -139,6 +146,12 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
     private var enemyMissed = 0
 
     var debug: String = ""; private set
+
+    // Truy cập chẩn đoán (test / lớp phủ), sau khi process() của khung gần nhất
+    fun debugForeground(x: Int, y: Int): Boolean = fg[y * width + x]
+    fun debugMoving(x: Int, y: Int): Boolean = mv[y * width + x]
+    fun debugLineMask(x: Int, y: Int): Boolean = lineMask[y * width + x]
+    fun debugPaletteSize(): Int = palette.size
 
     private class Blob(var minX: Int, var maxX: Int, var minY: Int, var maxY: Int, var count: Int) {
         val w get() = maxX - minX + 1
@@ -261,7 +274,9 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
     private fun buildLineMask() {
         lineMask.fill(false)
         if (!pivotValid || lastAngle.isNaN()) return
-        val r1 = (p.scanOuterFrac * height).roundToInt() + 4
+        // Chỉ che phần gốc gần tâm xoay: xa hơn, vạch dịch ≥ 1 px/khung nên đã bị loại nhờ mặt nạ chuyển động,
+        // còn che cả chiều dài sẽ cắt đôi địch mỗi khi vạch quét qua nó.
+        val r1 = (p.lineMaskRadiusFrac * height).roundToInt() + 4
         for (da in -2..2) {
             val a = Math.toRadians(lastAngle + da)
             val cx = cos(a); val sy = -sin(a)
@@ -497,13 +512,13 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
             val density = b.count.toDouble() / (b.w * b.h)
             val aspect = b.h.toDouble() / b.w
             val area = (b.w * b.h).toDouble()
-            density >= p.blobMinDensity && aspect in 1.1..4.5 && area >= 0.3 * playerArea && area <= 3.0 * playerArea &&
+            density >= p.blobMinDensity && aspect in p.enemyMinAspect..p.enemyMaxAspect && area >= 0.3 * playerArea && area <= 3.0 * playerArea &&
                 b.maxY < pivotY + 0.05 * height && b.h >= 0.04 * height && b.h <= 0.25 * height
         }
         val pick = cands.minByOrNull { distToBox(pivotX, pivotY, it) }
         if (pick == null) {
             enemyMissed++
-            if (enemyMissed > 4) enemy = null
+            if (enemyMissed > p.enemyHoldFrames) enemy = null
             return
         }
         enemyMissed = 0

@@ -42,6 +42,19 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 5. Trạng thái hiện trong thông báo (Flappy: fps, tốc độ cuộn, chim, ống, g / vFlap / độ trễ đã đo;
    Mr Gun: tâm xoay, góc, vận tốc góc, biên lắc, địch, số phát bắn); bấm **Dừng** để tắt.
 
+## Đã thử trên máy thật (Xiaomi 17 Pro, HyperOS / Android 16)
+
+- Màn 1220×2656 → khung chụp 202×442. Ghi hình 8 s Mr Gun (`adb shell screenrecord`) rồi tách khung bằng ffmpeg
+  (`scale=202:440:flags=area`) và chạy `MrGunRealFramesTest`: tâm xoay 469/479 khung, góc bám đúng (lắc −1…61°, ≈59°/s),
+  địch 469/479, một quyết định bắn mỗi lượt vạch quét qua đầu địch. 40 khung trong số đó nằm ở
+  `core/src/test/resources/mrgun_real/` làm test hồi quy.
+- Khi cấp quyền chụp màn hình hãy chọn **Toàn bộ màn hình**; nếu 3 s không nhận được khung hình nào, thông báo sẽ báo.
+  Trạng thái chi tiết (fps, tap, cử chỉ xong/huỷ) xem `adb logcat -s AgentService TapAccessibility`.
+- HyperOS có thể ngắt kết nối dịch vụ Trợ năng của app (Game Turbo); màn hình app hiện "đã bật trong Cài đặt nhưng chưa
+  kết nối" → tắt rồi bật lại dịch vụ trong Cài đặt → Trợ năng.
+- Chụp màn hình qua adb trên máy này cần chỉ định display: `adb exec-out screencap -p -d <id>` (id từ
+  `dumpsys SurfaceFlinger --display-id`); trong Git Bash đặt `MSYS_NO_PATHCONV=1` khi truyền đường dẫn `/sdcard/...`.
+
 ## Giới hạn hiện tại (v0.2)
 
 - Flappy: bộ nhận diện giả định bố cục cổ điển: ống cột đứng nối mép trên/đất, chim ở nửa trái, màn cuộn sang trái.

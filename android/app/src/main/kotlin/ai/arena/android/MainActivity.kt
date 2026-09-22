@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private val requestProjection = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             val game = selectedGame
+            getSharedPreferences("agent", MODE_PRIVATE).edit().putString("game", game.id).apply()
             val intent = Intent(this, AgentService::class.java)
                 .setAction(AgentService.ACTION_START)
                 .putExtra(AgentService.EXTRA_RESULT_CODE, result.resultCode)
@@ -50,7 +51,9 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             refreshChecks()
             txtStatus.text = if (AgentStatus.running) {
-                "ĐANG CHẠY (${AgentStatus.game}) · khung ${AgentStatus.frames} · tap ${AgentStatus.taps}\n${AgentStatus.text}" +
+                "ĐANG CHẠY (${AgentStatus.game}) · khung ${AgentStatus.frames} · tap ${AgentStatus.taps}" +
+                    (if (AgentStatus.contentVisible) "" else " · nội dung chụp đang ẩn") +
+                    "\n${AgentStatus.text}" +
                     (if (AgentStatus.lastError.isNotEmpty()) "\nLỗi: ${AgentStatus.lastError}" else "")
             } else {
                 getString(R.string.status_idle) + (if (AgentStatus.lastError.isNotEmpty()) "\nLỗi: ${AgentStatus.lastError}" else "")
@@ -65,8 +68,9 @@ class MainActivity : AppCompatActivity() {
         txtChecks = findViewById(R.id.txtChecks)
         txtStatus = findViewById(R.id.txtStatus)
         gameGroup = findViewById(R.id.gameGroup)
+        val saved = GameKind.fromId(getSharedPreferences("agent", MODE_PRIVATE).getString("game", null))
         for ((i, kind) in GameKind.entries.withIndex()) {
-            val rb = RadioButton(this).apply { id = 1000 + i; text = kind.label; isChecked = i == 0 }
+            val rb = RadioButton(this).apply { id = 1000 + i; text = kind.label; isChecked = kind == saved }
             gameGroup.addView(rb)
         }
 
@@ -93,11 +97,26 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() { super.onPause(); ui.removeCallbacks(poll) }
 
     private fun refreshChecks() {
-        val acc = TapAccessibilityService.instance != null
+        val connected = TapAccessibilityService.instance != null
+        val enabledInSettings = (Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "")
+            .contains("$packageName/")
         val notif = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         txtChecks.text = buildString {
-            append(if (acc) "✓" else "✗").append(" Trợ năng: ").append(if (acc) "đã bật" else "chưa bật").append('\n')
+            append(if (connected) "✓" else "✗").append(" Trợ năng: ")
+            append(
+                when {
+                    connected -> "đã kết nối"
+                    enabledInSettings -> "đã bật trong Cài đặt nhưng chưa kết nối — tắt rồi bật lại dịch vụ"
+                    else -> "chưa bật"
+                }
+            ).append('\n')
             append(if (notif) "✓" else "✗").append(" Thông báo: ").append(if (notif) "đã cấp" else "chưa cấp")
+            if (TapAccessibilityService.dispatched > 0 || TapAccessibilityService.rejected > 0) {
+                append('\n').append("Cử chỉ: gửi ").append(TapAccessibilityService.dispatched)
+                    .append(" · xong ").append(TapAccessibilityService.completed)
+                    .append(" · huỷ ").append(TapAccessibilityService.cancelled)
+                    .append(" · từ chối ").append(TapAccessibilityService.rejected)
+            }
         }
     }
 }

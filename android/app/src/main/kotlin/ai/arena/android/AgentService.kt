@@ -27,10 +27,14 @@ import kotlin.math.ceil
 
 /**
  * Dịch vụ nền: chụp màn hình qua MediaProjection ở độ phân giải thấp, đưa từng khung vào
- * [FlappyAgent] và tap qua [TapAccessibilityService] khi tác nhân yêu cầu.
+ * tác nhân của game đã chọn ([GameKind]) và tap qua [TapAccessibilityService] khi tác nhân yêu cầu.
  *
  * Android 14+: phải startForeground với kiểu mediaProjection TRƯỚC khi lấy MediaProjection,
  * và mỗi lần người dùng cấp quyền chỉ dùng được một lần.
+ *
+ * Khung hình được lấy theo hai đường: listener của ImageReader và một bộ canh (watchdog) 500 ms
+ * tự kéo ảnh nếu listener im lặng — hàng đợi ảnh có thể đầy trước khi listener kịp gắn, khi đó
+ * listener sẽ không bao giờ được gọi nữa.
  */
 class AgentService : Service() {
 
@@ -46,9 +50,12 @@ class AgentService : Service() {
 
         /** Bề rộng khung đưa vào tác nhân (px). Chiều cao theo tỉ lệ màn hình. */
         private const val TARGET_WIDTH = 216
-        /** Vị trí tap theo tỉ lệ màn hình — Flappy nhận tap ở bất kỳ đâu, tránh mép có nút. */
+        /** Vị trí tap theo tỉ lệ màn hình — Flappy / Mr Gun nhận tap ở bất kỳ đâu, tránh mép có nút. */
         private const val TAP_X_FRAC = 0.5f
         private const val TAP_Y_FRAC = 0.62f
+        private const val WATCHDOG_MS = 500L
+        private const val NO_FRAME_WARN_MS = 3000L
+        private const val LOG_EVERY_FRAMES = 120L
     }
 
     private lateinit var thread: HandlerThread
@@ -64,6 +71,29 @@ class AgentService : Service() {
     private var screenW = 0
     private var screenH = 0
     private var lastNotifUpdate = 0L
+    private var startMs = 0L
+    private var lastFrameMs = 0L
+    private var lastLogMs = 0L
+    private var lastLogFrames = 0L
+    private var warnedNoFrames = false
+
+    private val watchdog = object : Runnable {
+        override fun run() {
+            val r = reader ?: return
+            val now = SystemClock.elapsedRealtime()
+            // Listener im lặng > 300 ms → tự kéo ảnh (nếu có) để thông hàng đợi
+            if (now - lastFrameMs > 300) onImage(r)
+            if (AgentStatus.frames == 0L && now - startMs > NO_FRAME_WARN_MS && !warnedNoFrames) {
+                warnedNoFrames = true
+                val msg = "Chưa nhận được khung hình nào sau ${NO_FRAME_WARN_MS / 1000} s. " +
+                    "Hãy Dừng, bắt đầu lại và chọn 'Toàn bộ màn hình' trong hộp thoại chụp màn hình."
+                Log.w(TAG, msg)
+                AgentStatus.lastError = msg
+                notify(msg)
+            }
+            handler.postDelayed(this, WATCHDOG_MS)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -102,7 +132,18 @@ class AgentService : Service() {
         val mp = mpm.getMediaProjection(code, data) ?: error("MediaProjection null")
         projection = mp
         mp.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() { stopCapture(); stopSelf() }
+            override fun onStop() {
+                Log.w(TAG, "projection stopped by system/user")
+                AgentStatus.lastError = "Hệ thống đã dừng chụp màn hình"
+                stopCapture(); stopSelf()
+            }
+            override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
+                Log.i(TAG, "captured content visible=$isVisible")
+                AgentStatus.contentVisible = isVisible
+            }
+            override fun onCapturedContentResize(width: Int, height: Int) {
+                Log.i(TAG, "captured content resized to ${width}x$height")
+            }
         }, handler)
 
         val wm = getSystemService(WindowManager::class.java)
@@ -114,23 +155,28 @@ class AgentService : Service() {
         captureH = (screenH / factor) and 1.inv()
         rgb = IntArray(captureW * captureH)
 
+        agent = game.createAgent(captureW, captureH)
+        AgentStatus.running = true
+        AgentStatus.game = game.label
+        AgentStatus.frames = 0; AgentStatus.taps = 0; AgentStatus.lastError = ""; AgentStatus.contentVisible = true
+        AgentStatus.text = "${game.label}: đang chụp ${captureW}×${captureH} (màn ${screenW}×${screenH})"
+        startMs = SystemClock.elapsedRealtime(); lastFrameMs = startMs; lastLogMs = startMs; lastLogFrames = 0
+        warnedNoFrames = false
+
         val r = ImageReader.newInstance(captureW, captureH, PixelFormat.RGBA_8888, 3)
         reader = r
+        // Gắn listener TRƯỚC khi tạo màn hình ảo để không bỏ lỡ / kẹt các khung đầu tiên
+        r.setOnImageAvailableListener({ onImage(it) }, handler)
         display = mp.createVirtualDisplay(
             "ai-arena-agent", captureW, captureH, dpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, r.surface, null, handler,
         )
-        agent = game.createAgent(captureW, captureH)
-        AgentStatus.running = true
-        AgentStatus.game = game.label
-        AgentStatus.frames = 0; AgentStatus.taps = 0; AgentStatus.lastError = ""
-        AgentStatus.text = "${game.label}: đang chụp ${captureW}×${captureH} (màn ${screenW}×${screenH})"
-        r.setOnImageAvailableListener({ onImage(it) }, handler)
-        Log.i(TAG, "capture started ${captureW}x$captureH from ${screenW}x$screenH")
+        handler.postDelayed(watchdog, WATCHDOG_MS)
+        Log.i(TAG, "capture started ${captureW}x$captureH from ${screenW}x$screenH game=${game.id}")
     }
 
     private fun onImage(reader: ImageReader) {
-        val img = reader.acquireLatestImage() ?: return
+        val img = try { reader.acquireLatestImage() } catch (e: Exception) { Log.e(TAG, "acquireLatestImage", e); null } ?: return
         try {
             val plane = img.planes[0]
             val buf = plane.buffer
@@ -154,25 +200,38 @@ class AgentService : Service() {
         val ag = agent ?: return
         val t = SystemClock.elapsedRealtimeNanos()
         val out = ag.onFrame(Frame(captureW, captureH, rgb), t)
+        val now = SystemClock.elapsedRealtime()
+        lastFrameMs = now
         AgentStatus.frames++
+        if (AgentStatus.frames == 1L) Log.i(TAG, "first frame after ${now - startMs} ms")
         if (out.tap) {
             val svc = TapAccessibilityService.instance
             if (svc == null) {
-                AgentStatus.lastError = "Chưa bật dịch vụ Trợ năng — không tap được"
+                AgentStatus.lastError = "Dịch vụ Trợ năng chưa kết nối — không tap được (tắt rồi bật lại trong Cài đặt)"
+                Log.w(TAG, "tap requested but accessibility service not connected")
             } else if (svc.tap(screenW * TAP_X_FRAC, screenH * TAP_Y_FRAC)) {
                 AgentStatus.taps++
             }
         }
         AgentStatus.text = out.status
-        val now = SystemClock.elapsedRealtime()
+        if (now - lastLogMs >= 2000 || AgentStatus.frames - lastLogFrames >= LOG_EVERY_FRAMES) {
+            val fps = (AgentStatus.frames - lastLogFrames) * 1000.0 / (now - lastLogMs).coerceAtLeast(1)
+            Log.i(TAG, "f=${AgentStatus.frames} fps=%.1f taps=${AgentStatus.taps} g=${TapAccessibilityService.completed}/${TapAccessibilityService.cancelled} | ${out.status}".format(fps))
+            lastLogMs = now; lastLogFrames = AgentStatus.frames
+        }
         if (now - lastNotifUpdate > 1000) {
             lastNotifUpdate = now
-            getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(out.status))
+            notify(out.status)
         }
+    }
+
+    private fun notify(text: String) {
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
     }
 
     private fun stopCapture() {
         AgentStatus.running = false
+        handler.removeCallbacks(watchdog)
         reader?.setOnImageAvailableListener(null, null)
         display?.release(); display = null
         reader?.close(); reader = null

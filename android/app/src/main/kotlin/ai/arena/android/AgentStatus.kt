@@ -8,4 +8,6 @@ object AgentStatus {
     @Volatile var frames: Long = 0
     @Volatile var taps: Long = 0
     @Volatile var lastError: String = ""
+    /** Nội dung được chụp có đang hiển thị không (MediaProjection báo, Android 14+). */
+    @Volatile var contentVisible: Boolean = true
 }
