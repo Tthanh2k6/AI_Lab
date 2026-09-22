@@ -4,6 +4,7 @@ import ai.arena.core.control.AimController
 import ai.arena.core.vision.Frame
 import ai.arena.core.vision.MrGunDetector
 import ai.arena.core.vision.MrGunObservation
+import kotlin.math.abs
 
 /**
  * Tác nhân Mr Gun: nhận diện tâm xoay / vạch ngắm / địch, bắn khi vạch sắp thẳng hàng.
@@ -28,6 +29,9 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
     private var lastLineT = -1L
     private var shots = 0
     private var restarts = 0
+    private var stableX = Double.NaN
+    private var stableY = Double.NaN
+    private var stableFrames = 0
 
     override fun onFrame(frame: Frame, tNanos: Long): Output {
         if (firstT < 0) { firstT = tNanos; lastTapT = tNanos }
@@ -47,12 +51,22 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
         var tapX = Double.NaN
         var tapY = Double.NaN
 
-        // Màn thua: thấy nút "chơi lại", không thấy vạch ngắm ≥ 1 s → tap vào đúng nút
-        if (!tap && !obs.transition && !obs.restartX.isNaN()) {
+        // Nút "chơi lại" phải đứng yên ≥ 6 khung liên tiếp (lệch ≤ 4 px) mới tin
+        if (!obs.restartX.isNaN() && abs(obs.restartX - stableX) <= 4 && abs(obs.restartY - stableY) <= 4) stableFrames++
+        else { stableFrames = if (obs.restartX.isNaN()) 0 else 1; stableX = obs.restartX; stableY = obs.restartY }
+
+        if (!tap && !obs.transition) {
             val sinceLine = if (lastLineT < 0) (tNanos - firstT) / 1e9 else (tNanos - lastLineT) / 1e9
             if (sinceLine > 1.0 && sinceTap > 1.5) {
-                tap = true; reason = "restart"; restarts++
-                tapX = obs.restartX / width; tapY = obs.restartY / height
+                if (stableFrames >= 6) {
+                    // Màn thua: tap đúng vào nút chơi lại
+                    tap = true; reason = "restart"; restarts++
+                    tapX = obs.restartX / width; tapY = obs.restartY / height
+                } else if (obs.startScreen) {
+                    // Màn bắt đầu level: "TAP TO START" — tap giữa màn, tránh hàng nút ở dưới
+                    tap = true; reason = "start"; restarts++
+                    tapX = 0.5; tapY = 0.5
+                }
             }
         }
 
@@ -62,5 +76,8 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
         return Output(obs, tap, reason, status, d.detail, tapX, tapY)
     }
 
-    override fun reset() { detector.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0; restarts = 0 }
+    override fun reset() {
+        detector.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0; restarts = 0
+        stableX = Double.NaN; stableY = Double.NaN; stableFrames = 0
+    }
 }

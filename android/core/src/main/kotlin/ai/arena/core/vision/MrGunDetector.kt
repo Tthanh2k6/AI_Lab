@@ -40,6 +40,8 @@ class MrGunObservation(
     val motionFrac: Double,
     /** Tâm nút "chơi lại" nếu nhận ra trên màn thua (px; NaN nếu không thấy). Chỉ tìm khi không có vạch ngắm. */
     val restartX: Double = Double.NaN, val restartY: Double = Double.NaN,
+    /** Màn bắt đầu level ("TAP TO START"): một hàng ≥ 3 nút vuông rỗng cùng cỡ ở nửa dưới — tap giữa màn để vào. */
+    val startScreen: Boolean = false,
 )
 
 /**
@@ -239,9 +241,9 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
 
         debug = "pivot=(%.0f,%.0f%s res=%.1f fits=%d) angle=%.1f w=%.0f sweep=[%.0f,%.0f] blobs=%d enemy=%s motion=%.3f".format(
             pivotX, pivotY, if (pivotValid) "" else "?", pivotResidual, fits.size, angle, omega, sweepMin, sweepMax, blobs.size, enemy, motionFrac)
-        val restart = if (angle.isNaN()) findRestartButton() else null
+        val menu = if (angle.isNaN()) findMenu() else null
         return MrGunObservation(frameIndex - 1, tNanos, pivotX, pivotY, pivotValid, angle, omega, sweepMin, sweepMax, enemy, false, motionFrac,
-            restart?.first ?: Double.NaN, restart?.second ?: Double.NaN)
+            menu?.restartX ?: Double.NaN, menu?.restartY ?: Double.NaN, menu?.startScreen ?: false)
     }
 
     // ── Nền ─────────────────────────────────────────────────────────────────
@@ -505,12 +507,16 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
         return out.filter { it.count >= p.blobMinCount }
     }
 
+    private class MenuHint(val restartX: Double, val restartY: Double, val startScreen: Boolean)
+
     /**
-     * Nút "chơi lại" trên màn thua: khối tiền cảnh (viền ô vuông + biểu tượng bên trong) rộng 15–35 % màn,
-     * gần vuông, nằm giữa theo chiều ngang ở nửa dưới màn hình. Không tap mù trên màn thua vì banner
-     * quảng cáo thường nằm giữa màn. Trả về tâm (px) hoặc null.
+     * Nhận diện màn menu khi KHÔNG có vạch ngắm, dựa trên các "ô vuông rỗng" (viền kín, ruột thưa) ở nửa dưới:
+     *  • màn thua: đúng một ô rộng 15–35 % màn nằm giữa theo chiều ngang → nút "chơi lại" (tap vào tâm);
+     *  • màn bắt đầu level: một hàng ≥ 3 ô cùng cỡ, cùng độ cao (ELITE / BLACKLIST / OUTFITS / GUN STORE)
+     *    → "TAP TO START": tap giữa màn, KHÔNG tap vào ô nào.
+     * Banner quảng cáo (khối rộng, ruột đặc) không thoả điều kiện nào → không bao giờ bị tap.
      */
-    private fun findRestartButton(): Pair<Double, Double>? {
+    private fun findMenu(): MenuHint? {
         val y0 = height / 2
         labels.fill(0)
         val out = ArrayList<Blob>()
@@ -550,14 +556,47 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
                 }
             }
         }
-        val best = out.filter { b ->
-            val cx = (b.minX + b.maxX) / 2.0; val cy = (b.minY + b.maxY) / 2.0
+        val squares = out.filter { b ->
             val aspect = b.h.toDouble() / b.w
-            b.w >= 0.15 * width && b.w <= 0.35 * width && aspect in 0.75..1.3 &&
-                abs(cx - width / 2.0) <= 0.12 * width && cy >= 0.55 * height && cy <= 0.92 * height &&
-                b.count.toDouble() / (b.w * b.h) >= 0.08
-        }.maxByOrNull { it.count } ?: return null
-        return Pair((best.minX + best.maxX) / 2.0, (best.minY + best.maxY) / 2.0)
+            b.w >= 0.12 * width && b.w <= 0.35 * width && aspect in 0.75..1.3 &&
+                (b.minY + b.maxY) / 2.0 >= 0.55 * height && isFramedSquare(b)
+        }
+        if (squares.isEmpty()) return null
+        // Hàng nút: ≥ 3 ô cùng cỡ (rộng lệch ≤ 40 %) và cùng độ cao (tâm lệch ≤ 5 % màn)
+        for (a in squares) {
+            val row = squares.filter { b ->
+                max(a.w, b.w) <= 1.4 * min(a.w, b.w) && abs((a.minY + a.maxY) - (b.minY + b.maxY)) / 2.0 <= 0.05 * height
+            }
+            if (row.size >= 3) return MenuHint(Double.NaN, Double.NaN, true)
+        }
+        // Nút chơi lại: ô rộng ≥ 15 % màn, nằm giữa; không có ô nào khác cùng cỡ
+        val centred = squares.filter { b -> b.w >= 0.15 * width && abs((b.minX + b.maxX) / 2.0 - width / 2.0) <= 0.06 * width }
+        val best = centred.maxByOrNull { it.count } ?: return null
+        val rival = squares.any { it !== best && it.w >= 0.7 * best.w }
+        if (rival) return null
+        return MenuHint((best.minX + best.maxX) / 2.0, (best.minY + best.maxY) / 2.0, false)
+    }
+
+    /** Ô vuông rỗng: 4 cạnh của khung bao đều có nét (≥ 60 % chiều dài) và ruột (50 % giữa) thưa (≤ 55 %). */
+    private fun isFramedSquare(b: Blob): Boolean {
+        val t = max(2, (0.08 * b.w).roundToInt())
+        fun rows(y0: Int, y1: Int): Double {
+            var cols = 0
+            for (x in b.minX..b.maxX) { var hit = false; for (y in y0..y1) if (fg[y * width + x]) { hit = true; break }; if (hit) cols++ }
+            return cols.toDouble() / b.w
+        }
+        fun cols(x0: Int, x1: Int): Double {
+            var rows = 0
+            for (y in b.minY..b.maxY) { var hit = false; for (x in x0..x1) if (fg[y * width + x]) { hit = true; break }; if (hit) rows++ }
+            return rows.toDouble() / b.h
+        }
+        val top = rows(b.minY, min(b.maxY, b.minY + t)); val bottom = rows(max(b.minY, b.maxY - t), b.maxY)
+        val left = cols(b.minX, min(b.maxX, b.minX + t)); val right = cols(max(b.minX, b.maxX - t), b.maxX)
+        if (min(min(top, bottom), min(left, right)) < 0.6) return false
+        val ix0 = b.minX + b.w / 4; val ix1 = b.maxX - b.w / 4; val iy0 = b.minY + b.h / 4; val iy1 = b.maxY - b.h / 4
+        var n = 0; var f = 0
+        for (y in iy0..iy1) for (x in ix0..ix1) { n++; if (fg[y * width + x]) f++ }
+        return n > 0 && f.toDouble() / n <= 0.55
     }
 
     private fun updateEnemy(blobs: List<Blob>) {

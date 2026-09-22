@@ -49,7 +49,7 @@ class MrGunRealFramesTest {
                 if (o.enemy != null) st.enemy++
                 if (out.tap && out.reason.startsWith("fire")) st.fires++
             }
-            if (!o.restartX.isNaN()) st.restart++
+            if (!o.restartX.isNaN() || o.startScreen) st.restart++
             if (verbose || out.tap || i == files.size - 1) {
                 println("%4d %-12s | pivot=(%.0f,%.0f%s) θ=%.1f ω=%.0f sweep=[%.0f,%.0f] enemy=%s restart=(%.0f,%.0f) | %s %s | %s".format(
                     i, f.name, o.pivotX, o.pivotY, if (o.pivotValid) "" else "?", o.angleDeg, o.angularVelDegPerSec,
@@ -100,20 +100,33 @@ class MrGunRealFramesTest {
         assertTrue(st.angle >= 0.9 * st.frames, "angle ${st.angle}/${st.frames}")
         assertTrue(st.enemy >= 0.9 * st.frames, "enemy ${st.enemy}/${st.frames}")
         assertTrue(st.fires >= 1, "expected at least one fire decision while the line sweeps across the enemy")
-        assertEquals(0, st.restart, "no restart button must be reported during play")
+        assertEquals(0, st.restart, "no restart button / start screen must be reported during play")
     }
 
-    @Test
-    fun restartButtonFoundOnGameOverScreen() {
-        val frame = load(File(javaClass.getResource("/mrgun_gameover.png")!!.toURI()))
+    private fun still(resource: String): Pair<Frame, MrGunObservation> {
+        val frame = load(File(javaClass.getResource(resource)!!.toURI()))
         val det = MrGunDetector(frame.width, frame.height)
         var obs: MrGunObservation? = null
         for (i in 0 until 20) obs = det.process(frame, i * 16_666_667L)
         val o = obs!!
-        println("gameover: restart=(%.0f,%.0f) angle=%.1f enemy=%s | %s".format(o.restartX, o.restartY, o.angleDeg, o.enemy, det.debug))
+        println("$resource: restart=(%.0f,%.0f) start=%s angle=%.1f enemy=%s | %s".format(o.restartX, o.restartY, o.startScreen, o.angleDeg, o.enemy, det.debug))
+        return frame to o
+    }
+
+    @Test
+    fun restartButtonFoundOnGameOverScreen() {
+        val (frame, o) = still("/mrgun_gameover.png")
         assertTrue(!o.restartX.isNaN(), "restart button not found")
+        assertTrue(!o.startScreen, "game-over screen must not look like the start screen")
         val fx = o.restartX / frame.width; val fy = o.restartY / frame.height
         assertTrue(abs(fx - 0.53) < 0.06 && abs(fy - 0.78) < 0.05, "restart at (%.2f, %.2f) of screen".format(fx, fy))
+    }
+
+    @Test
+    fun startScreenRecognisedWithoutTappingItsButtons() {
+        val (_, o) = still("/mrgun_start.png")
+        assertTrue(o.startScreen, "start screen (row of 4 framed buttons) not recognised")
+        assertTrue(o.restartX.isNaN(), "no button on the start screen may be taken for the restart button")
     }
 
     @Test

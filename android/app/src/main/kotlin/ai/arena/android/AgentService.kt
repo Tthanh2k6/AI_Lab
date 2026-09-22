@@ -62,7 +62,6 @@ class AgentService : Service() {
     private var reader: ImageReader? = null
     private var agent: GameAgent? = null
     private var game: GameKind = GameKind.FLAPPY
-    private var rgb: IntArray = IntArray(0)
     private var captureW = 0
     private var captureH = 0
     private var screenW = 0
@@ -73,6 +72,7 @@ class AgentService : Service() {
     private var lastLogMs = 0L
     private var lastLogFrames = 0L
     private var warnedNoFrames = false
+    private var procMsEma = 0.0
 
     private val watchdog = object : Runnable {
         override fun run() {
@@ -150,7 +150,6 @@ class AgentService : Service() {
         val factor = ceil(screenW / TARGET_WIDTH.toDouble()).toInt().coerceAtLeast(1)
         captureW = (screenW / factor) and 1.inv()
         captureH = (screenH / factor) and 1.inv()
-        rgb = IntArray(captureW * captureH)
 
         agent = game.createAgent(captureW, captureH)
         AgentStatus.running = true
@@ -174,12 +173,16 @@ class AgentService : Service() {
 
     private fun onImage(reader: ImageReader) {
         val img = try { reader.acquireLatestImage() } catch (e: Exception) { Log.e(TAG, "acquireLatestImage", e); null } ?: return
+        val rgb: IntArray
         try {
             val plane = img.planes[0]
             val buf = plane.buffer
             val rowStride = plane.rowStride
             val pixelStride = plane.pixelStride
             val w = captureW; val h = captureH
+            // Bộ đệm MỚI cho mỗi khung: bộ nhận diện giữ tham chiếu tới khung trước để so sánh chuyển động,
+            // dùng chung một mảng sẽ làm khung trước luôn giống khung sau (không thấy gì chuyển động).
+            rgb = IntArray(w * h)
             for (y in 0 until h) {
                 var i = y * rowStride
                 val row = y * w
@@ -197,6 +200,8 @@ class AgentService : Service() {
         val ag = agent ?: return
         val t = SystemClock.elapsedRealtimeNanos()
         val out = ag.onFrame(Frame(captureW, captureH, rgb), t)
+        val procMs = (SystemClock.elapsedRealtimeNanos() - t) / 1e6
+        procMsEma = if (procMsEma == 0.0) procMs else 0.9 * procMsEma + 0.1 * procMs
         val now = SystemClock.elapsedRealtime()
         lastFrameMs = now
         AgentStatus.frames++
@@ -217,7 +222,7 @@ class AgentService : Service() {
         AgentStatus.text = out.status
         if (now - lastLogMs >= 2000 || AgentStatus.frames - lastLogFrames >= LOG_EVERY_FRAMES) {
             val fps = (AgentStatus.frames - lastLogFrames) * 1000.0 / (now - lastLogMs).coerceAtLeast(1)
-            Log.i(TAG, "f=${AgentStatus.frames} fps=%.1f taps=${AgentStatus.taps} g=${TapAccessibilityService.completed}/${TapAccessibilityService.cancelled} | ${out.status}".format(fps))
+            Log.i(TAG, "f=${AgentStatus.frames} fps=%.1f proc=%.1fms taps=${AgentStatus.taps} g=${TapAccessibilityService.completed}/${TapAccessibilityService.cancelled} | ${out.status}".format(fps, procMsEma))
             lastLogMs = now; lastLogFrames = AgentStatus.frames
         }
         if (now - lastNotifUpdate > 1000) {
