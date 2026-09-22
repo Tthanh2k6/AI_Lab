@@ -38,6 +38,8 @@ class MrGunObservation(
     /** Cả màn đang chuyển động (leo cầu thang / chuyển cảnh) — không nên bắn. */
     val transition: Boolean,
     val motionFrac: Double,
+    /** Tâm nút "chơi lại" nếu nhận ra trên màn thua (px; NaN nếu không thấy). Chỉ tìm khi không có vạch ngắm. */
+    val restartX: Double = Double.NaN, val restartY: Double = Double.NaN,
 )
 
 /**
@@ -237,7 +239,9 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
 
         debug = "pivot=(%.0f,%.0f%s res=%.1f fits=%d) angle=%.1f w=%.0f sweep=[%.0f,%.0f] blobs=%d enemy=%s motion=%.3f".format(
             pivotX, pivotY, if (pivotValid) "" else "?", pivotResidual, fits.size, angle, omega, sweepMin, sweepMax, blobs.size, enemy, motionFrac)
-        return MrGunObservation(frameIndex - 1, tNanos, pivotX, pivotY, pivotValid, angle, omega, sweepMin, sweepMax, enemy, false, motionFrac)
+        val restart = if (angle.isNaN()) findRestartButton() else null
+        return MrGunObservation(frameIndex - 1, tNanos, pivotX, pivotY, pivotValid, angle, omega, sweepMin, sweepMax, enemy, false, motionFrac,
+            restart?.first ?: Double.NaN, restart?.second ?: Double.NaN)
     }
 
     // ── Nền ─────────────────────────────────────────────────────────────────
@@ -499,6 +503,61 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
             }
         }
         return out.filter { it.count >= p.blobMinCount }
+    }
+
+    /**
+     * Nút "chơi lại" trên màn thua: khối tiền cảnh (viền ô vuông + biểu tượng bên trong) rộng 15–35 % màn,
+     * gần vuông, nằm giữa theo chiều ngang ở nửa dưới màn hình. Không tap mù trên màn thua vì banner
+     * quảng cáo thường nằm giữa màn. Trả về tâm (px) hoặc null.
+     */
+    private fun findRestartButton(): Pair<Double, Double>? {
+        val y0 = height / 2
+        labels.fill(0)
+        val out = ArrayList<Blob>()
+        var next = 1
+        for (start in y0 * width until width * height) {
+            if (!fg[start] || labels[start] != 0) continue
+            if (out.size >= 64) break
+            val b = Blob(start % width, start % width, start / width, start / width, 0)
+            var sp = 0; stack[sp++] = start; labels[start] = next
+            while (sp > 0) {
+                val i = stack[--sp]
+                val x = i % width; val y = i / width
+                b.count++
+                if (x < b.minX) b.minX = x; if (x > b.maxX) b.maxX = x
+                if (y < b.minY) b.minY = y; if (y > b.maxY) b.maxY = y
+                for (dy in -1..1) for (dx in -1..1) {
+                    if (dx == 0 && dy == 0) continue
+                    val nx = x + dx; val ny = y + dy
+                    if (nx < 0 || nx >= width || ny < y0 || ny >= height) continue
+                    val j = ny * width + nx
+                    if (fg[j] && labels[j] == 0) { labels[j] = next; stack[sp++] = j }
+                }
+            }
+            if (b.count >= 8) out.add(b)
+            next++
+        }
+        // Gộp khối kề / lồng nhau (viền bị đứt, biểu tượng nằm trong viền)
+        var merged = true
+        while (merged) {
+            merged = false
+            outer@ for (i in out.indices) for (j in i + 1 until out.size) {
+                val a = out[i]; val b = out[j]
+                if (a.minX <= b.maxX + 3 && b.minX <= a.maxX + 3 && a.minY <= b.maxY + 3 && b.minY <= a.maxY + 3) {
+                    a.minX = min(a.minX, b.minX); a.maxX = max(a.maxX, b.maxX)
+                    a.minY = min(a.minY, b.minY); a.maxY = max(a.maxY, b.maxY); a.count += b.count
+                    out.removeAt(j); merged = true; break@outer
+                }
+            }
+        }
+        val best = out.filter { b ->
+            val cx = (b.minX + b.maxX) / 2.0; val cy = (b.minY + b.maxY) / 2.0
+            val aspect = b.h.toDouble() / b.w
+            b.w >= 0.15 * width && b.w <= 0.35 * width && aspect in 0.75..1.3 &&
+                abs(cx - width / 2.0) <= 0.12 * width && cy >= 0.55 * height && cy <= 0.92 * height &&
+                b.count.toDouble() / (b.w * b.h) >= 0.08
+        }.maxByOrNull { it.count } ?: return null
+        return Pair((best.minX + best.maxX) / 2.0, (best.minY + best.maxY) / 2.0)
     }
 
     private fun updateEnemy(blobs: List<Blob>) {

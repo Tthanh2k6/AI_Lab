@@ -5,7 +5,10 @@ import ai.arena.core.vision.Frame
 import ai.arena.core.vision.MrGunDetector
 import ai.arena.core.vision.MrGunObservation
 
-/** Tác nhân Mr Gun: nhận diện tâm xoay / vạch ngắm / địch, bắn khi vạch sắp thẳng hàng. */
+/**
+ * Tác nhân Mr Gun: nhận diện tâm xoay / vạch ngắm / địch, bắn khi vạch sắp thẳng hàng.
+ * Trên màn thua chỉ tap khi nhận ra nút "chơi lại" và tap đúng vào nó — không tap mù vì dễ trúng quảng cáo.
+ */
 class MrGunAgent(val width: Int, val height: Int) : GameAgent {
 
     override val name = "Mr Gun"
@@ -13,8 +16,10 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
     val detector = MrGunDetector(width, height)
     val controller = AimController()
 
-    class Output(val observation: MrGunObservation, tap: Boolean, reason: String, status: String, detail: String = "") :
-        AgentOutput(tap, reason, status, detail)
+    class Output(
+        val observation: MrGunObservation, tap: Boolean, reason: String, status: String, detail: String = "",
+        tapXFrac: Double = Double.NaN, tapYFrac: Double = Double.NaN,
+    ) : AgentOutput(tap, reason, status, detail, tapXFrac, tapYFrac)
 
     var fps = 60.0; private set
     private var lastT = -1L
@@ -22,6 +27,7 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
     private var firstT = -1L
     private var lastLineT = -1L
     private var shots = 0
+    private var restarts = 0
 
     override fun onFrame(frame: Frame, tNanos: Long): Output {
         if (firstT < 0) { firstT = tNanos; lastTapT = tNanos }
@@ -34,23 +40,27 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
         val obs = detector.process(frame, tNanos)
         if (!obs.angleDeg.isNaN()) lastLineT = tNanos
         val sinceTap = (tNanos - lastTapT) / 1e9
-        var tap = false
-        var reason: String
-        var detail = ""
 
         val d = controller.decide(obs, sinceTap, 1.0 / fps)
-        tap = d.tap; reason = d.reason; detail = d.detail
+        var tap = d.tap
+        var reason = d.reason
+        var tapX = Double.NaN
+        var tapY = Double.NaN
 
-        // Không thấy vạch ngắm lâu (menu / thua / màn chờ) → tap thưa để bắt đầu lại
-        if (!tap && !obs.transition) {
+        // Màn thua: thấy nút "chơi lại", không thấy vạch ngắm ≥ 1 s → tap vào đúng nút
+        if (!tap && !obs.transition && !obs.restartX.isNaN()) {
             val sinceLine = if (lastLineT < 0) (tNanos - firstT) / 1e9 else (tNanos - lastLineT) / 1e9
-            if (sinceLine > 2.0 && sinceTap > 1.5) { tap = true; reason = "restart" }
+            if (sinceLine > 1.0 && sinceTap > 1.5) {
+                tap = true; reason = "restart"; restarts++
+                tapX = obs.restartX / width; tapY = obs.restartY / height
+            }
         }
 
         if (tap) { lastTapT = tNanos; if (reason.startsWith("fire")) shots++ }
-        val status = "%.0f fps · %s · bắn %d · %s%s".format(fps, if (obs.transition) "chuyển cảnh" else detector.debug, shots, if (tap) "TAP:" else "", reason)
-        return Output(obs, tap, reason, status, detail)
+        val status = "%.0f fps · %s · bắn %d · chơi lại %d · %s%s".format(
+            fps, if (obs.transition) "chuyển cảnh" else detector.debug, shots, restarts, if (tap) "TAP:" else "", reason)
+        return Output(obs, tap, reason, status, d.detail, tapX, tapY)
     }
 
-    override fun reset() { detector.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0 }
+    override fun reset() { detector.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0; restarts = 0 }
 }

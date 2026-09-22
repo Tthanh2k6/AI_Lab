@@ -48,6 +48,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   (`scale=202:440:flags=area`) và chạy `MrGunRealFramesTest`: tâm xoay 469/479 khung, góc bám đúng (lắc −1…61°, ≈59°/s),
   địch 469/479, một quyết định bắn mỗi lượt vạch quét qua đầu địch. 40 khung trong số đó nằm ở
   `core/src/test/resources/mrgun_real/` làm test hồi quy.
+- Vị trí tap: Flappy (50 %, 62 %); Mr Gun bắn ở (50 %, 78 %) và trên màn thua chỉ tap khi nhận ra nút **chơi lại**
+  (ô vuông giữa-dưới) rồi tap đúng vào nó — banner quảng cáo nằm giữa màn nên không tap mù ở đó.
 - Khi cấp quyền chụp màn hình hãy chọn **Toàn bộ màn hình**; nếu 3 s không nhận được khung hình nào, thông báo sẽ báo.
   Trạng thái chi tiết (fps, tap, cử chỉ xong/huỷ) xem `adb logcat -s AgentService TapAccessibility`.
 - HyperOS có thể ngắt kết nối dịch vụ Trợ năng của app (Game Turbo); màn hình app hiện "đã bật trong Cài đặt nhưng chưa

@@ -50,9 +50,6 @@ class AgentService : Service() {
 
         /** Bề rộng khung đưa vào tác nhân (px). Chiều cao theo tỉ lệ màn hình. */
         private const val TARGET_WIDTH = 216
-        /** Vị trí tap theo tỉ lệ màn hình — Flappy / Mr Gun nhận tap ở bất kỳ đâu, tránh mép có nút. */
-        private const val TAP_X_FRAC = 0.5f
-        private const val TAP_Y_FRAC = 0.62f
         private const val WATCHDOG_MS = 500L
         private const val NO_FRAME_WARN_MS = 3000L
         private const val LOG_EVERY_FRAMES = 120L
@@ -209,8 +206,12 @@ class AgentService : Service() {
             if (svc == null) {
                 AgentStatus.lastError = "Dịch vụ Trợ năng chưa kết nối — không tap được (tắt rồi bật lại trong Cài đặt)"
                 Log.w(TAG, "tap requested but accessibility service not connected")
-            } else if (svc.tap(screenW * TAP_X_FRAC, screenH * TAP_Y_FRAC)) {
-                AgentStatus.taps++
+            } else {
+                // Vị trí tap: tác nhân chỉ định (vd. nút chơi lại) hoặc mặc định của game
+                val fx = if (out.tapXFrac.isNaN()) game.tapXFrac else out.tapXFrac
+                val fy = if (out.tapYFrac.isNaN()) game.tapYFrac else out.tapYFrac
+                if (!out.tapXFrac.isNaN()) Log.i(TAG, "tap ${out.reason} at (%.2f, %.2f)".format(fx, fy))
+                if (svc.tap((screenW * fx).toFloat(), (screenH * fy).toFloat())) AgentStatus.taps++
             }
         }
         AgentStatus.text = out.status
