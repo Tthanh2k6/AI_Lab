@@ -11,13 +11,16 @@ import kotlin.math.abs
  * Ghép nhận diện + đo vật lý + điều khiển thành một tác nhân: nhận khung hình, trả về có tap hay không.
  * Không biết gì về Android — phía app chỉ việc đưa khung hình vào và thực hiện cú tap khi được bảo.
  */
-class FlappyAgent(val width: Int, val height: Int) {
+class FlappyAgent(val width: Int, val height: Int) : GameAgent {
+
+    override val name = "Flappy Bird"
 
     val detector = FlappyDetector(width, height)
     val physics = PhysicsEstimator(height)
     val controller = FlapController(height)
 
-    class Output(val observation: Observation, val tap: Boolean, val reason: String, val status: String, val detail: String = "")
+    class Output(val observation: Observation, tap: Boolean, reason: String, status: String, detail: String = "") :
+        AgentOutput(tap, reason, status, detail)
 
     var fps = 60.0; private set
     private var lastT = -1L
@@ -26,7 +29,7 @@ class FlappyAgent(val width: Int, val height: Int) {
     private var firstT = -1L
     private var lastReason = ""
 
-    fun onFrame(frame: Frame, tNanos: Long): Output {
+    override fun onFrame(frame: Frame, tNanos: Long): Output {
         // Khung đầu tiên: coi như vừa "tap" để các luật tap-khi-rảnh (restart/kickoff) chờ đủ lâu
         // cho bộ nhận diện khoá được chim trước, thay vì tap mù ngay lập tức.
         if (firstT < 0) { firstT = tNanos; lastTapT = tNanos }
@@ -80,5 +83,5 @@ class FlappyAgent(val width: Int, val height: Int) {
         }
     }
 
-    fun reset() { detector.reset(); physics.reset(); lastT = -1; lastTapT = -1; lastPipeT = -1; firstT = -1 }
+    override fun reset() { detector.reset(); physics.reset(); lastT = -1; lastTapT = -1; lastPipeT = -1; firstT = -1 }
 }

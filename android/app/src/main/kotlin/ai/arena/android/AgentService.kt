@@ -1,6 +1,7 @@
 package ai.arena.android
 
-import ai.arena.core.agent.FlappyAgent
+import ai.arena.core.agent.GameAgent
+import ai.arena.core.agent.GameKind
 import ai.arena.core.vision.Frame
 import android.app.Notification
 import android.app.NotificationChannel
@@ -38,6 +39,7 @@ class AgentService : Service() {
         const val ACTION_STOP = "ai.arena.android.action.STOP"
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_RESULT_DATA = "resultData"
+        const val EXTRA_GAME = "game"
         private const val CHANNEL_ID = "agent"
         private const val NOTIF_ID = 1
         private const val TAG = "AgentService"
@@ -54,7 +56,8 @@ class AgentService : Service() {
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
     private var reader: ImageReader? = null
-    private var agent: FlappyAgent? = null
+    private var agent: GameAgent? = null
+    private var game: GameKind = GameKind.FLAPPY
     private var rgb: IntArray = IntArray(0)
     private var captureW = 0
     private var captureH = 0
@@ -79,7 +82,8 @@ class AgentService : Service() {
                 val data: Intent? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
                 else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_RESULT_DATA)
                 if (code == Int.MIN_VALUE || data == null) { stopSelf(); return START_NOT_STICKY }
-                startForeground(NOTIF_ID, buildNotification("Đang khởi động…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+                game = GameKind.fromId(intent.getStringExtra(EXTRA_GAME))
+                startForeground(NOTIF_ID, buildNotification("Đang khởi động ${game.label}…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
                 try {
                     startCapture(code, data)
                 } catch (e: Exception) {
@@ -116,10 +120,11 @@ class AgentService : Service() {
             "ai-arena-agent", captureW, captureH, dpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, r.surface, null, handler,
         )
-        agent = FlappyAgent(captureW, captureH)
+        agent = game.createAgent(captureW, captureH)
         AgentStatus.running = true
+        AgentStatus.game = game.label
         AgentStatus.frames = 0; AgentStatus.taps = 0; AgentStatus.lastError = ""
-        AgentStatus.text = "Đang chụp ${captureW}×${captureH} (màn ${screenW}×${screenH})"
+        AgentStatus.text = "${game.label}: đang chụp ${captureW}×${captureH} (màn ${screenW}×${screenH})"
         r.setOnImageAvailableListener({ onImage(it) }, handler)
         Log.i(TAG, "capture started ${captureW}x$captureH from ${screenW}x$screenH")
     }
@@ -185,7 +190,7 @@ class AgentService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle(getString(R.string.app_name))
+            .setContentTitle("${getString(R.string.app_name)} · ${game.label}")
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setContentIntent(openIntent)

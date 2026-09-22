@@ -9,7 +9,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import ai.arena.core.agent.GameKind
 import android.widget.Button
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,18 +23,24 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var txtChecks: TextView
     private lateinit var txtStatus: TextView
+    private lateinit var gameGroup: RadioGroup
     private val ui = Handler(Looper.getMainLooper())
+
+    private val selectedGame: GameKind
+        get() = GameKind.entries.getOrNull(gameGroup.indexOfChild(gameGroup.findViewById(gameGroup.checkedRadioButtonId))) ?: GameKind.FLAPPY
 
     private val requestNotification = registerForActivityResult(ActivityResultContracts.RequestPermission()) { refreshChecks() }
 
     private val requestProjection = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val game = selectedGame
             val intent = Intent(this, AgentService::class.java)
                 .setAction(AgentService.ACTION_START)
                 .putExtra(AgentService.EXTRA_RESULT_CODE, result.resultCode)
                 .putExtra(AgentService.EXTRA_RESULT_DATA, result.data)
+                .putExtra(AgentService.EXTRA_GAME, game.id)
             ContextCompat.startForegroundService(this, intent)
-            Toast.makeText(this, "Đã bắt đầu — mở game Flappy Bird lên", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Đã bắt đầu — mở game ${game.label} lên", Toast.LENGTH_LONG).show()
         } else {
             Toast.makeText(this, "Bạn chưa cho phép chụp màn hình", Toast.LENGTH_SHORT).show()
         }
@@ -41,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             refreshChecks()
             txtStatus.text = if (AgentStatus.running) {
-                "ĐANG CHẠY · khung ${AgentStatus.frames} · tap ${AgentStatus.taps}\n${AgentStatus.text}" +
+                "ĐANG CHẠY (${AgentStatus.game}) · khung ${AgentStatus.frames} · tap ${AgentStatus.taps}\n${AgentStatus.text}" +
                     (if (AgentStatus.lastError.isNotEmpty()) "\nLỗi: ${AgentStatus.lastError}" else "")
             } else {
                 getString(R.string.status_idle) + (if (AgentStatus.lastError.isNotEmpty()) "\nLỗi: ${AgentStatus.lastError}" else "")
@@ -55,6 +64,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         txtChecks = findViewById(R.id.txtChecks)
         txtStatus = findViewById(R.id.txtStatus)
+        gameGroup = findViewById(R.id.gameGroup)
+        for ((i, kind) in GameKind.entries.withIndex()) {
+            val rb = RadioButton(this).apply { id = 1000 + i; text = kind.label; isChecked = i == 0 }
+            gameGroup.addView(rb)
+        }
 
         findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))

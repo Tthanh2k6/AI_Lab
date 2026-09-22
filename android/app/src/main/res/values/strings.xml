@@ -3,7 +3,8 @@
     <string name="app_name">AI Arena Agent</string>
     <string name="accessibility_label">AI Arena Agent — tap tự động</string>
     <string name="accessibility_desc">Cho phép tác nhân AI chạm vào màn hình game (chỉ dùng cá nhân). Dịch vụ không đọc nội dung màn hình.</string>
-    <string name="intro">Tác nhân đọc màn hình game qua chụp màn hình và tự tap. Làm theo 3 bước rồi mở game Flappy Bird lên.</string>
+    <string name="intro">Tác nhân đọc màn hình game qua chụp màn hình và tự tap. Chọn game, làm theo 3 bước rồi mở game lên.</string>
+    <string name="pick_game">Game:</string>
     <string name="btn_accessibility">1. Bật dịch vụ Trợ năng</string>
     <string name="btn_notification">2. Cấp quyền thông báo</string>
     <string name="btn_start">3. Chọn game &amp; bắt đầu</string>
