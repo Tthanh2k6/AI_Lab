@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Script bash cua Gradle wrapper phai giu LF, ke ca khi checkout tren Windows
+android/gradlew text eol=lf
