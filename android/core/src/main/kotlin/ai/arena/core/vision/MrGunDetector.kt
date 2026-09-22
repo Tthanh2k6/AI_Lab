@@ -42,6 +42,8 @@ class MrGunObservation(
     val restartX: Double = Double.NaN, val restartY: Double = Double.NaN,
     /** Màn bắt đầu level ("TAP TO START"): một hàng ≥ 3 nút vuông rỗng cùng cỡ ở nửa dưới — tap giữa màn để vào. */
     val startScreen: Boolean = false,
+    /** Tâm nút "NO THANKS" trên menu hồi sinh ("CONTINUE?" xem quảng cáo) — tap để từ chối (px; NaN nếu không thấy). */
+    val declineX: Double = Double.NaN, val declineY: Double = Double.NaN,
 )
 
 /**
@@ -82,6 +84,11 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
         val enemyHoldFrames: Int = 30,
         /** Bán kính che vạch ngắm quanh tâm xoay (tỉ lệ chiều cao): chỉ phần gốc gần tâm mới "đứng yên". */
         val lineMaskRadiusFrac: Double = 0.15,
+        /** Khoảng hở dọc tối đa (tỉ lệ chiều cao) để gộp hai mảnh chồng nhau theo x thành một nhân vật. */
+        val figureSplitGapFrac: Double = 0.025,
+        /** Chiều cao địch tối thiểu / tối đa (tỉ lệ chiều cao màn). */
+        val enemyMinHeightFrac: Double = 0.03,
+        val enemyMaxHeightFrac: Double = 0.25,
         /** Góc nhảy quá mức này giữa 2 khung → gián đoạn (lượt mới không bắt được chuyển cảnh), không phải đảo chiều. */
         val maxStepDeg: Double = 20.0,
         /** Góc quan sát vượt biên đã học quá mức này → biên sai, bỏ xác nhận. */
@@ -156,6 +163,11 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
     fun debugMoving(x: Int, y: Int): Boolean = mv[y * width + x]
     fun debugLineMask(x: Int, y: Int): Boolean = lineMask[y * width + x]
     fun debugPaletteSize(): Int = palette.size
+    /** Chỉ dành cho test: ép tâm xoay để đánh giá bộ lọc địch trên một ảnh tĩnh (không có vạch chuyển động). */
+    fun debugForcePivot(x: Double, y: Double) { pivotX = x; pivotY = y; pivotValid = true }
+    /** Khối tĩnh của khung gần nhất: [minX, maxX, minY, maxY, count]. */
+    fun debugBlobs(): List<IntArray> = lastBlobs.map { intArrayOf(it.minX, it.maxX, it.minY, it.maxY, it.count) }
+    private var lastBlobs: List<Blob> = emptyList()
 
     private class Blob(var minX: Int, var maxX: Int, var minY: Int, var maxY: Int, var count: Int) {
         val w get() = maxX - minX + 1
@@ -237,13 +249,15 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
         lastAngle = angle
 
         // Địch
+        lastBlobs = blobs
         updateEnemy(blobs)
 
         debug = "pivot=(%.0f,%.0f%s res=%.1f fits=%d) angle=%.1f w=%.0f sweep=[%.0f,%.0f] blobs=%d enemy=%s motion=%.3f".format(
             pivotX, pivotY, if (pivotValid) "" else "?", pivotResidual, fits.size, angle, omega, sweepMin, sweepMax, blobs.size, enemy, motionFrac)
         val menu = if (angle.isNaN()) findMenu() else null
         return MrGunObservation(frameIndex - 1, tNanos, pivotX, pivotY, pivotValid, angle, omega, sweepMin, sweepMax, enemy, false, motionFrac,
-            menu?.restartX ?: Double.NaN, menu?.restartY ?: Double.NaN, menu?.startScreen ?: false)
+            menu?.restartX ?: Double.NaN, menu?.restartY ?: Double.NaN, menu?.startScreen ?: false,
+            menu?.declineX ?: Double.NaN, menu?.declineY ?: Double.NaN)
     }
 
     // ── Nền ─────────────────────────────────────────────────────────────────
@@ -491,13 +505,18 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
         }
         // Mảnh vụn còn sót của các nét mảnh → bỏ trước khi gộp
         out.removeAll { b -> b.count.toDouble() / (b.w * b.h) < 0.15 }
-        // Gộp các khối kề nhau (nhân vật bị vạch ngắm hoặc khoảng hở cắt đôi)
+        // Gộp các khối kề nhau (nhân vật bị vạch ngắm hoặc khoảng hở cắt đôi). Khẩu súng của địch có thể
+        // cùng màu nền (xám) và cắt ngang thân → hai mảnh chồng nhau theo x, cách nhau tới ~2.5 % màn cũng gộp.
+        val vGap = max(3, (p.figureSplitGapFrac * height).roundToInt())
         var merged = true
         while (merged) {
             merged = false
             outer@ for (i in out.indices) for (j in i + 1 until out.size) {
                 val a = out[i]; val b = out[j]
-                if (a.minX <= b.maxX + 3 && b.minX <= a.maxX + 3 && a.minY <= b.maxY + 3 && b.minY <= a.maxY + 3) {
+                val near = a.minX <= b.maxX + 3 && b.minX <= a.maxX + 3 && a.minY <= b.maxY + 3 && b.minY <= a.maxY + 3
+                val overlapX = min(a.maxX, b.maxX) - max(a.minX, b.minX) + 1
+                val stacked = overlapX >= 0.5 * min(a.w, b.w) && a.minY <= b.maxY + vGap && b.minY <= a.maxY + vGap
+                if (near || stacked) {
                     a.minX = min(a.minX, b.minX); a.maxX = max(a.maxX, b.maxX)
                     a.minY = min(a.minY, b.minY); a.maxY = max(a.maxY, b.maxY); a.count += b.count
                     out.removeAt(j); merged = true; break@outer
@@ -507,13 +526,18 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
         return out.filter { it.count >= p.blobMinCount }
     }
 
-    private class MenuHint(val restartX: Double, val restartY: Double, val startScreen: Boolean)
+    private class MenuHint(
+        val restartX: Double, val restartY: Double, val startScreen: Boolean,
+        val declineX: Double = Double.NaN, val declineY: Double = Double.NaN,
+    )
 
     /**
      * Nhận diện màn menu khi KHÔNG có vạch ngắm, dựa trên các "ô vuông rỗng" (viền kín, ruột thưa) ở nửa dưới:
      *  • màn thua: đúng một ô rộng 15–35 % màn nằm giữa theo chiều ngang → nút "chơi lại" (tap vào tâm);
      *  • màn bắt đầu level: một hàng ≥ 3 ô cùng cỡ, cùng độ cao (ELITE / BLACKLIST / OUTFITS / GUN STORE)
-     *    → "TAP TO START": tap giữa màn, KHÔNG tap vào ô nào.
+     *    → "TAP TO START": tap giữa màn, KHÔNG tap vào ô nào;
+     *  • menu hồi sinh "CONTINUE?": hai khung chữ nhật rỗng, rộng 30–60 % màn, xếp chồng ở giữa
+     *    (trên = xem quảng cáo để tiếp tục, dưới = NO THANKS) → tap khung DƯỚI.
      * Banner quảng cáo (khối rộng, ruột đặc) không thoả điều kiện nào → không bao giờ bị tap.
      */
     private fun findMenu(): MenuHint? {
@@ -555,6 +579,17 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
                     out.removeAt(j); merged = true; break@outer
                 }
             }
+        }
+        // Menu hồi sinh: ≥ 2 khung chữ nhật rỗng, rộng, nằm giữa, xếp chồng → nút dưới cùng là NO THANKS
+        val wideFrames = out.filter { b ->
+            val aspect = b.h.toDouble() / b.w
+            b.w >= 0.30 * width && b.w <= 0.60 * width && aspect in 0.15..0.5 &&
+                abs((b.minX + b.maxX) / 2.0 - width / 2.0) <= 0.06 * width && isFramedSquare(b)
+        }
+        if (wideFrames.size >= 2) {
+            val lowest = wideFrames.maxByOrNull { it.maxY }!!
+            val above = wideFrames.filter { it !== lowest && lowest.minY - it.maxY >= 0.01 * height }
+            if (above.isNotEmpty()) return MenuHint(Double.NaN, Double.NaN, false, (lowest.minX + lowest.maxX) / 2.0, (lowest.minY + lowest.maxY) / 2.0)
         }
         val squares = out.filter { b ->
             val aspect = b.h.toDouble() / b.w
@@ -610,8 +645,8 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
             val density = b.count.toDouble() / (b.w * b.h)
             val aspect = b.h.toDouble() / b.w
             val area = (b.w * b.h).toDouble()
-            density >= p.blobMinDensity && aspect in p.enemyMinAspect..p.enemyMaxAspect && area >= 0.3 * playerArea && area <= 3.0 * playerArea &&
-                b.maxY < pivotY + 0.05 * height && b.h >= 0.04 * height && b.h <= 0.25 * height
+            density >= p.blobMinDensity && aspect in p.enemyMinAspect..p.enemyMaxAspect && area >= 0.15 * playerArea && area <= 3.0 * playerArea &&
+                b.maxY < pivotY + 0.05 * height && b.h >= p.enemyMinHeightFrac * height && b.h <= p.enemyMaxHeightFrac * height
         }
         val pick = cands.minByOrNull { distToBox(pivotX, pivotY, it) }
         if (pick == null) {

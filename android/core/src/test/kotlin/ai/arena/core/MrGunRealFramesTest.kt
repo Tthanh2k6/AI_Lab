@@ -49,7 +49,7 @@ class MrGunRealFramesTest {
                 if (o.enemy != null) st.enemy++
                 if (out.tap && out.reason.startsWith("fire")) st.fires++
             }
-            if (!o.restartX.isNaN() || o.startScreen) st.restart++
+            if (!o.restartX.isNaN() || o.startScreen || !o.declineX.isNaN()) st.restart++
             if (verbose || out.tap || i == files.size - 1) {
                 println("%4d %-12s | pivot=(%.0f,%.0f%s) θ=%.1f ω=%.0f sweep=[%.0f,%.0f] enemy=%s restart=(%.0f,%.0f) | %s %s | %s".format(
                     i, f.name, o.pivotX, o.pivotY, if (o.pivotValid) "" else "?", o.angleDeg, o.angularVelDegPerSec,
@@ -117,16 +117,67 @@ class MrGunRealFramesTest {
     fun restartButtonFoundOnGameOverScreen() {
         val (frame, o) = still("/mrgun_gameover.png")
         assertTrue(!o.restartX.isNaN(), "restart button not found")
-        assertTrue(!o.startScreen, "game-over screen must not look like the start screen")
+        assertTrue(!o.startScreen && o.declineX.isNaN(), "game-over screen must not look like the start screen or revive menu")
         val fx = o.restartX / frame.width; val fy = o.restartY / frame.height
         assertTrue(abs(fx - 0.53) < 0.06 && abs(fy - 0.78) < 0.05, "restart at (%.2f, %.2f) of screen".format(fx, fy))
+    }
+
+    /**
+     * Menu hồi sinh dựng theo bố cục prefab (ReviveMenu, canvas 946×2048 khớp theo chiều cao): nền tối,
+     * chữ "CONTINUE?" ở 30 % từ trên, nút xem quảng cáo (khung viền, 460×151) ở 70 %, NO THANKS (384×120) ở ≈81 %.
+     */
+    @Test
+    fun reviveMenuDeclineButtonIsTheLowerFrame() {
+        val w = 202; val h = 440
+        val rgb = IntArray(w * h) { Frame.pack(18, 20, 14) }
+        fun frameRect(cx: Double, cy: Double, rw: Double, rh: Double, color: Int) {
+            val x0 = (cx - rw / 2).toInt(); val x1 = (cx + rw / 2).toInt(); val y0 = (cy - rh / 2).toInt(); val y1 = (cy + rh / 2).toInt()
+            for (y in y0..y1) for (x in x0..x1) if (x - x0 < 2 || x1 - x < 2 || y - y0 < 2 || y1 - y < 2) rgb[y * w + x] = color
+        }
+        fun text(cx: Double, cy: Double, tw: Double, color: Int) {
+            val x0 = (cx - tw / 2).toInt(); val x1 = (cx + tw / 2).toInt(); val yy = cy.toInt()
+            for (x in x0..x1 step 3) for (y in yy - 2..yy + 2) rgb[y * w + x] = color
+        }
+        val sx = h / 2048.0
+        text(w / 2.0, 0.30 * h, 300 * sx, Frame.pack(255, 255, 255))                       // CONTINUE?
+        frameRect(w / 2.0, 0.70 * h, 460 * sx, 151 * sx, Frame.pack(90, 220, 240))          // continue (ad)
+        text(w / 2.0, 0.70 * h, 200 * sx, Frame.pack(255, 255, 255))
+        frameRect(w / 2.0, 0.70 * h + 226 * sx, 384 * sx, 120 * sx, Frame.pack(170, 170, 170)) // NO THANKS
+        text(w / 2.0, 0.70 * h + 226 * sx, 160 * sx, Frame.pack(170, 170, 170))
+        val frame = Frame(w, h, rgb)
+        val det = MrGunDetector(w, h)
+        var obs: MrGunObservation? = null
+        for (i in 0 until 20) obs = det.process(frame, i * 16_666_667L)
+        val o = obs!!
+        println("revive: decline=(%.0f,%.0f) restart=(%.0f,%.0f) start=%s | %s".format(o.declineX, o.declineY, o.restartX, o.restartY, o.startScreen, det.debug))
+        assertTrue(!o.declineX.isNaN(), "NO THANKS not found")
+        assertTrue(o.restartX.isNaN() && !o.startScreen, "revive menu must not look like fail menu or start screen")
+        assertTrue(abs(o.declineX / w - 0.5) < 0.04 && abs(o.declineY / h - 0.81) < 0.04, "decline at (%.2f, %.2f)".format(o.declineX / w, o.declineY / h))
+    }
+
+    /**
+     * Level 22 thật: địch LONG (đầu trắng nhỏ, thân xanh lá cao gầy) cầm súng lục màu xám trùng màu nền,
+     * khẩu súng cắt ngang thân → hai mảnh phải được gộp lại. Tâm xoay ép ở vị trí đo được trên máy (36,264).
+     */
+    @Test
+    fun longEnemySplitByGreyGunIsStillFound() {
+        val frame = load(File(javaClass.getResource("/mrgun_level22.png")!!.toURI()))
+        val det = MrGunDetector(frame.width, frame.height)
+        repeat(3) { det.process(frame, it * 16_666_667L) }
+        det.debugForcePivot(36.0, 264.0)
+        val o = det.process(frame, 3 * 16_666_667L)
+        println("level22: enemy=${o.enemy} blobs=${det.debugBlobs().joinToString { "x=${it[0]}..${it[1]} y=${it[2]}..${it[3]} n=${it[4]}" }}")
+        val e = o.enemy
+        assertTrue(e != null, "LONG enemy not found")
+        assertTrue(e!!.minY <= 220 && e.maxY >= 240 && e.minX >= 140 && e.maxX <= 162, "enemy box x=${e.minX}..${e.maxX} y=${e.minY}..${e.maxY}")
+        assertTrue(abs(e.headX - 151) <= 3 && abs(e.headY - 222) <= 4, "head at (${e.headX}, ${e.headY})")
     }
 
     @Test
     fun startScreenRecognisedWithoutTappingItsButtons() {
         val (_, o) = still("/mrgun_start.png")
         assertTrue(o.startScreen, "start screen (row of 4 framed buttons) not recognised")
-        assertTrue(o.restartX.isNaN(), "no button on the start screen may be taken for the restart button")
+        assertTrue(o.restartX.isNaN() && o.declineX.isNaN(), "no button on the start screen may be taken for the restart / decline button")
     }
 
     @Test

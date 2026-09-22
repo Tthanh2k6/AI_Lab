@@ -29,6 +29,7 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
     private var lastLineT = -1L
     private var shots = 0
     private var restarts = 0
+    private var stableKind = ""
     private var stableX = Double.NaN
     private var stableY = Double.NaN
     private var stableFrames = 0
@@ -51,17 +52,20 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
         var tapX = Double.NaN
         var tapY = Double.NaN
 
-        // Nút "chơi lại" phải đứng yên ≥ 6 khung liên tiếp (lệch ≤ 4 px) mới tin
-        if (!obs.restartX.isNaN() && abs(obs.restartX - stableX) <= 4 && abs(obs.restartY - stableY) <= 4) stableFrames++
-        else { stableFrames = if (obs.restartX.isNaN()) 0 else 1; stableX = obs.restartX; stableY = obs.restartY }
+        // Nút cần tap (chơi lại / NO THANKS) phải đứng yên ≥ 6 khung liên tiếp (lệch ≤ 4 px) mới tin
+        val targetKind = if (!obs.restartX.isNaN()) "restart" else if (!obs.declineX.isNaN()) "decline" else ""
+        val targetX = if (targetKind == "restart") obs.restartX else obs.declineX
+        val targetY = if (targetKind == "restart") obs.restartY else obs.declineY
+        if (targetKind.isNotEmpty() && targetKind == stableKind && abs(targetX - stableX) <= 4 && abs(targetY - stableY) <= 4) stableFrames++
+        else { stableFrames = if (targetKind.isEmpty()) 0 else 1; stableKind = targetKind; stableX = targetX; stableY = targetY }
 
         if (!tap && !obs.transition) {
             val sinceLine = if (lastLineT < 0) (tNanos - firstT) / 1e9 else (tNanos - lastLineT) / 1e9
             if (sinceLine > 1.0 && sinceTap > 1.5) {
                 if (stableFrames >= 6) {
-                    // Màn thua: tap đúng vào nút chơi lại
-                    tap = true; reason = "restart"; restarts++
-                    tapX = obs.restartX / width; tapY = obs.restartY / height
+                    // Màn thua: tap đúng vào nút chơi lại; menu hồi sinh: tap NO THANKS
+                    tap = true; reason = targetKind; restarts++
+                    tapX = targetX / width; tapY = targetY / height
                 } else if (obs.startScreen) {
                     // Màn bắt đầu level: "TAP TO START" — tap giữa màn, tránh hàng nút ở dưới
                     tap = true; reason = "start"; restarts++
@@ -78,6 +82,6 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
 
     override fun reset() {
         detector.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0; restarts = 0
-        stableX = Double.NaN; stableY = Double.NaN; stableFrames = 0
+        stableKind = ""; stableX = Double.NaN; stableY = Double.NaN; stableFrames = 0
     }
 }
