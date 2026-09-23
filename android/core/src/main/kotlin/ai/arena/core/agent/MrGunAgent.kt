@@ -10,12 +10,12 @@ import kotlin.math.abs
  * Tác nhân Mr Gun: nhận diện tâm xoay / vạch ngắm / địch, bắn khi vạch sắp thẳng hàng.
  * Trên màn thua chỉ tap khi nhận ra nút "chơi lại" và tap đúng vào nó — không tap mù vì dễ trúng quảng cáo.
  */
-class MrGunAgent(val width: Int, val height: Int) : GameAgent {
+class MrGunAgent(val width: Int, val height: Int, aimParams: AimController.Params = AimController.Params()) : GameAgent {
 
     override val name = "Mr Gun"
 
     val detector = MrGunDetector(width, height)
-    val controller = AimController()
+    val controller = AimController(aimParams)
 
     class Output(
         val observation: MrGunObservation, tap: Boolean, reason: String, status: String, detail: String = "",

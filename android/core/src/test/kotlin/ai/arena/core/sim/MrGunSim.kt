@@ -114,7 +114,7 @@ class MrGunSim(val skin: MrGunSkin, val w: Int = 180, val h: Int = 320, seed: Lo
         }
         // thân (khung: thân + chân)
         val bx0 = enemyX - 3.5 * s; val bx1 = enemyX + 3.5 * s
-        val by0 = enemyFeetY - 21 * s; val by1 = enemyFeetY
+        val by0 = enemyFeetY - 26 * s; val by1 = enemyFeetY   // thân nối liền lên tâm đầu (đầu game là ô vuông đặt trên thân, không có khe)
         var r = 1.0
         while (r < 1.2 * h) {
             val x = pivotX + r * dx; val y = pivotY + r * dy

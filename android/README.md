@@ -1,73 +1,76 @@
-# AI Arena Agent (Android)
+# AI Arena Agent · Android
 
-Tác nhân chạy **hoàn toàn trên điện thoại**: đọc màn hình game bằng chụp màn hình (MediaProjection),
-nhận diện theo **cấu trúc** của thể loại game (không bám vào sprite của một bản cụ thể), rồi tap qua
-dịch vụ Trợ năng. Không cần root. Chỉ dùng cá nhân. Hiện có hai tác nhân, chọn trong app trước khi bắt đầu:
+**Nhìn khung hình. Ước lượng chuyển động. Chọn đúng lúc tap.**
+
+[← AI Game Arena](../README.md)
+
+Tác nhân chơi game chạy trên điện thoại, dùng **MediaProjection** để đọc màn hình và **Accessibility Service** để gửi thao tác. Lõi nhận diện và điều khiển viết bằng Kotlin thuần, tách khỏi Android để kiểm thử bằng mô phỏng và khung hình ghi lại.
+
+## Game được hỗ trợ
 
 | Game | Nhận diện | Điều khiển |
-|---|---|---|
-| **Flappy Bird** (mọi bản clone) | chim / ống / đất theo cấu trúc; tự đo trọng lực, lực vỗ, độ trễ của bản đang chơi | `FlapController`: mô phỏng vài lựa chọn (vỗ ngay / vỗ khung sau / không vỗ), vỗ khi bắt buộc |
-| **Mr Gun** (Ketchapp) | tâm xoay + vạch ngắm đang lắc (khớp đường thẳng qua các khung), địch = khối tĩnh phía trên, đầu = phần trên khối; tự học biên lắc và vận tốc góc | `AimController`: dự đoán góc tại lúc tap có hiệu lực (θ + ω·độ trễ, phản xạ ở biên lắc), nhắm đầu nếu dải góc đủ rộng, không thì nhắm giữa thân |
+| --- | --- | --- |
+| Flappy Bird | Chim, ống, mặt đất và tốc độ cuộn theo cấu trúc hình ảnh | Ước lượng vật lý, so sánh các lựa chọn vỗ cánh |
+| Mr Gun | Nhân vật, địch, đầu trắng, tâm xoay và vạch ngắm | Dự đoán góc, chọn thời điểm bắn; nhận diện một số màn bắt đầu/chơi lại/hồi sinh |
 
-```
-MediaProjection (~216 px ngang) → FlappyDetector → PhysicsEstimator + FlapController → dispatchGesture
-                                 → MrGunDetector  → AimController                     ↗
-```
+Không có cam kết hỗ trợ mọi bản clone. Flappy giả định bố cục cuộn ngang với ống đứng; Mr Gun phụ thuộc hình học vạch ngắm, vị trí địch và đặc điểm nền.
 
-## Cấu trúc
+## Build & kiểm thử
 
-| Module | Nội dung | Cần gì để build |
-|---|---|---|
-| `core/` | Kotlin thuần: `vision/` (Frame, ScrollEstimator, FlappyDetector, MrGunDetector), `control/` (PhysicsEstimator, FlapController, AimController), `agent/` (GameAgent, FlappyAgent, MrGunAgent, GameKind). Test bằng mô phỏng nhiều skin trong `src/test/.../sim/` (FlappySim, MrGunSim). | JDK 17 |
-| `app/`  | Android: `AgentService` (chụp màn + chạy tác nhân, điều khiển qua thông báo), `TapAccessibilityService` (tap), `MainActivity` (cấp quyền, trạng thái). | Android SDK 36 |
+Chuẩn bị **JDK 17**, **Android SDK 36** và thiết bị **Android 11/API 30+**. Tạo `android/local.properties` với `sdk.dir` trỏ tới SDK của máy.
 
-## Build & chạy
+Từ thư mục `android/`:
 
-```bash
-cd android
-./gradlew :core:test            # nghiệm thu lõi: nhận diện, vật lý, vòng kín trên 5 skin mỗi game
-./gradlew :app:assembleDebug    # APK: app/build/outputs/apk/debug/app-debug.apk
+```powershell
+.\gradlew.bat :core:test
+.\gradlew.bat :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-`local.properties` (git bỏ qua) trỏ `sdk.dir` tới SDK trên máy. Không cần Android Studio.
+macOS/Linux dùng `./gradlew`. Test trong `core/` chạy trên JVM, không cần kết nối điện thoại; build ứng dụng cần SDK Android.
 
-## Trên điện thoại (Android 16, không root)
+## Chạy trên điện thoại
 
-1. Cài qua `adb install` (cài từ file APK tải về sẽ bị chặn bật Trợ năng bởi "cài đặt bị hạn chế").
-2. Mở app → **1. Bật dịch vụ Trợ năng** → bật "AI Arena Agent — tap tự động".
-3. **2. Cấp quyền thông báo** (để dịch vụ nền hiện trạng thái và nút Dừng).
-4. Chọn game (Flappy Bird / Mr Gun) → **3. Chọn game & bắt đầu** → hộp thoại chụp màn hình: chọn
-   **chia sẻ một ứng dụng** và chọn game (tránh chụp lẫn thông báo của chính app này) → mở game.
-5. Trạng thái hiện trong thông báo (Flappy: fps, tốc độ cuộn, chim, ống, g / vFlap / độ trễ đã đo;
-   Mr Gun: tâm xoay, góc, vận tốc góc, biên lắc, địch, số phát bắn); bấm **Dừng** để tắt.
+1. Cài APK, mở **AI Arena Agent**.
+2. Bật dịch vụ **Trợ năng** của ứng dụng; kiểm tra trạng thái đã kết nối trong app.
+3. Cấp quyền thông báo nếu hệ thống yêu cầu để xem trạng thái và nút dừng.
+4. Chọn **Flappy Bird** hoặc **Mr Gun**, bắt đầu phiên chụp màn hình rồi chuyển sang game.
+5. Theo dõi thông báo của tác nhân; chọn **Dừng** khi kết thúc.
 
-## Đã thử trên máy thật (Xiaomi 17 Pro, HyperOS / Android 16)
+Chế độ chia sẻ màn hình tùy Android và thiết bị. Trên thiết bị HyperOS đã thử nghiệm, nếu chia sẻ một ứng dụng không nhận được khung hình, hãy dừng phiên rồi thử **Toàn bộ màn hình**. Không giữ thông báo hay cửa sổ khác che vùng game khi tác nhân đang nhận diện.
 
-- Màn 1220×2656 → khung chụp 202×442. Ghi hình 8 s Mr Gun (`adb shell screenrecord`) rồi tách khung bằng ffmpeg
-  (`scale=202:440:flags=area`) và chạy `MrGunRealFramesTest`: tâm xoay 469/479 khung, góc bám đúng (lắc −1…61°, ≈59°/s),
-  địch 469/479, một quyết định bắn mỗi lượt vạch quét qua đầu địch. 40 khung trong số đó nằm ở
-  `core/src/test/resources/mrgun_real/` làm test hồi quy.
-- Vị trí tap: Flappy (50 %, 62 %); Mr Gun bắn ở (50 %, 78 %). Ngoài lúc chơi, Mr Gun **không tap mù**: màn thua → tap
-  đúng nút **chơi lại** (ô vuông rỗng đơn, giữa-dưới); màn bắt đầu level (hàng 4 nút ELITE / BLACKLIST / OUTFITS /
-  GUN STORE) → tap giữa màn; menu hồi sinh "CONTINUE?" → tap khung dưới (NO THANKS). Banner quảng cáo nằm giữa màn
-  thua, quảng cáo toàn màn thì tác nhân đứng yên chờ bạn đóng.
-- Đã đọc tài nguyên của Mr Gun 2.0.12 (Unity): vạch ngắm là nét trắng đặc 3.5 × 0.04 đơn vị kèm quạt 90° mờ; địch
-  thường = ô trắng (đầu) + ô vàng (thân) giống nhân vật mặc định, 3 dáng NORMAL / FAT / LONG; 60 boss texture riêng,
-  thanh máu ở 92 % màn; 51 outfit đổi màu nhân vật → không phân biệt bằng màu, chỉ bằng hình học quanh tâm xoay.
-- Khi cấp quyền chụp màn hình hãy chọn **Toàn bộ màn hình**; nếu 3 s không nhận được khung hình nào, thông báo sẽ báo.
-  Trạng thái chi tiết (fps, tap, cử chỉ xong/huỷ) xem `adb logcat -s AgentService TapAccessibility`.
-- HyperOS có thể ngắt kết nối dịch vụ Trợ năng của app (Game Turbo); màn hình app hiện "đã bật trong Cài đặt nhưng chưa
-  kết nối" → tắt rồi bật lại dịch vụ trong Cài đặt → Trợ năng.
-- Chụp màn hình qua adb trên máy này cần chỉ định display: `adb exec-out screencap -p -d <id>` (id từ
-  `dumpsys SurfaceFlinger --display-id`); trong Git Bash đặt `MSYS_NO_PATHCONV=1` khi truyền đường dẫn `/sdcard/...`.
+## Luồng xử lý
 
-## Giới hạn hiện tại (v0.2)
+```mermaid
+flowchart LR
+    Screen["MediaProjection"] --> Frame["Frame thu nhỏ"]
+    Frame --> Detector["FlappyDetector / MrGunDetector"]
+    Detector --> Agent["FlappyAgent / MrGunAgent"]
+    Agent --> Gesture["dispatchGesture"]
+```
 
-- Flappy: bộ nhận diện giả định bố cục cổ điển: ống cột đứng nối mép trên/đất, chim ở nửa trái, màn cuộn sang trái.
-  Bản có ống di chuyển dọc, chim trôi ngang hoặc nền quá nhiều hiệu ứng sẽ kém.
-- Mr Gun: giả định vạch ngắm là nét thẳng dài duy nhất đang chuyển động, địch đứng yên phía trên tâm xoay
-  và nền gồm vài màu phẳng chiếm diện tích lớn. Độ trễ tap dùng giá trị mặc định 80 ms (chưa tự đo);
-  boss nhiều máu được xử lý như địch thường (bắn lặp lại).
-- Vị trí tap cố định ở (50 %, 62 %) màn hình.
-- Chưa có lớp phủ debug trên màn hình; xem `adb logcat -s AgentService`.
+Tap mặc định của Flappy ở `(50%, 62%)`, của Mr Gun ở `(50%, 78%)`. Với một số menu Mr Gun, tác nhân dùng vị trí nút nhận diện được thay vì vị trí bắn mặc định; cấu hình nằm trong [`GameAgent.kt`](core/src/main/kotlin/ai/arena/core/agent/GameAgent.kt).
+
+## Cấu trúc
+
+| Module | Nội dung |
+| --- | --- |
+| [`core/`](core) | Khung hình, bộ nhận diện, ước lượng vật lý, bộ điều khiển và tác nhân |
+| [`core/src/test/`](core/src/test) | Test mô phỏng và hồi quy bằng ảnh |
+| [`core/src/test/resources/mrgun_real/`](core/src/test/resources/mrgun_real) | Bộ khung hình Mr Gun phục vụ test |
+| [`app/`](app) | Màn hình cấp quyền, dịch vụ chụp màn hình, trạng thái và dịch vụ tap |
+
+## Chẩn đoán & giới hạn
+
+```powershell
+adb logcat -s AgentService TapAccessibility
+```
+
+| Hiện tượng | Kiểm tra |
+| --- | --- |
+| Đã bật Trợ năng nhưng không tap | Trạng thái kết nối trong app; thử tắt/bật lại dịch vụ |
+| Không có khung hình | Phiên MediaProjection, chế độ chia sẻ và app đang được chụp |
+| Hoạt động rồi dừng | Chính sách pin, Game Turbo và quản lý tiến trình nền |
+| Nhận diện sai | Bố cục game, hiệu ứng nền, vật thể che khuất và log nhận diện |
+
+Repo có ghi nhận thử nghiệm trên Xiaomi 17 Pro/HyperOS/Android 16; điều này không thay thế kiểm thử tương thích trên từng máy. Mr Gun hiện dùng độ trễ tap cấu hình sẵn; chưa có lớp phủ debug. Quảng cáo toàn màn và các màn ngoài phạm vi nhận diện có thể cần thao tác thủ công.

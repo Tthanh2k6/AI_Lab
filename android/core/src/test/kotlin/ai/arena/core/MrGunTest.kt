@@ -14,7 +14,7 @@ class MrGunTest {
 
     @Test
     fun detectorFindsPivotLineAndEnemyOnEverySkin() {
-        val latencyFrames = 4
+        val latencyFrames = 8
         for (skin in MrGunSkins.all) {
             val sim = MrGunSim(skin, seed = 5)
             val det = MrGunDetector(sim.w, sim.h)
@@ -72,7 +72,7 @@ class MrGunTest {
 
     @Test
     fun agentKillsEnemiesFromPixelsOnly() {
-        val latencyFrames = 4
+        val latencyFrames = 8
         val minKills = 15
         val results = MrGunSkins.all.map { skin ->
             val sim = MrGunSim(skin, seed = 9)

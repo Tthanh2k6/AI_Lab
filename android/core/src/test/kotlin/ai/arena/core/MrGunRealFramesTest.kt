@@ -1,6 +1,7 @@
 package ai.arena.core
 
 import ai.arena.core.agent.MrGunAgent
+import ai.arena.core.control.AimController
 import ai.arena.core.vision.Frame
 import ai.arena.core.vision.MrGunDetector
 import ai.arena.core.vision.MrGunObservation
@@ -39,7 +40,8 @@ class MrGunRealFramesTest {
         var agent: MrGunAgent? = null
         for ((i, f) in files.withIndex()) {
             val frame = load(f)
-            val a = agent ?: MrGunAgent(frame.width, frame.height).also { agent = it }
+            // Đoạn ghi là giữa lượt (địch đã đứng yên từ trước) → bỏ thời gian chờ ổn định để 40 khung vẫn có một quyết định bắn
+            val a = agent ?: MrGunAgent(frame.width, frame.height, AimController.Params(enemySettleSec = 0.0)).also { agent = it }
             val out = a.onFrame(frame, (i * 1e9 / fps).toLong())
             val o = out.observation
             if (i >= warmup) {
@@ -94,7 +96,7 @@ class MrGunRealFramesTest {
     fun realFramesFromXiaomi17Pro() {
         val dir = File(javaClass.getResource("/mrgun_real")!!.toURI())
         val files = dir.listFiles { f -> f.name.endsWith(".png") }!!.sortedBy { it.name }
-        val st = run(files, 60.0, verbose = false, warmup = 12)
+        val st = run(files, 60.0, verbose = System.getenv("MRGUN_VERBOSE") != null, warmup = 12)
         println("real fixture: frames ${st.frames} pivot ${st.pivot} angle ${st.angle} enemy ${st.enemy} fires ${st.fires} restart ${st.restart}")
         assertTrue(st.pivot >= 0.9 * st.frames, "pivot ${st.pivot}/${st.frames}")
         assertTrue(st.angle >= 0.9 * st.frames, "angle ${st.angle}/${st.frames}")

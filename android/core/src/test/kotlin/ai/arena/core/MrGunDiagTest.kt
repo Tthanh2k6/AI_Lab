@@ -22,7 +22,7 @@ class MrGunDiagTest {
             val trueHead = "%.0f,%.0f".format(sim.enemyHeadX, sim.enemyHeadY)
             val out = agent.onFrame(frame, i * FlappySim.FRAME_NANOS)
             if (out.tap) pending.addLast(i)
-            val fire = pending.isNotEmpty() && i - pending.first() >= 4
+            val fire = pending.isNotEmpty() && i - pending.first() >= 8
             if (fire) pending.removeFirst()
             val o = out.observation
             val line = "%4d | %6.1f %2d %d %d | %6.1f %5.0f [%.0f,%.0f] | %s → %s | %s %s | %s".format(

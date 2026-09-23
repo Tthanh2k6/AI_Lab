@@ -18,7 +18,7 @@ class AimController(private val p: Params = Params()) {
 
     class Params(
         /** Độ trễ từ lúc phát lệnh tap đến lúc game bắn (giây) — chưa tự đo, dùng giá trị mặc định. */
-        val latencySec: Double = 0.08,
+        val latencySec: Double = 0.14,
         /** Rung của độ trễ (giây) → sai số góc = ω × jitter. */
         val jitterSec: Double = 0.012,
         /** Dưới tốc độ góc này CHỈ từ chối khi vạch thật sự đứng yên (không nhúc nhích quá stillSec) — vạch chậm lại
@@ -41,12 +41,15 @@ class AimController(private val p: Params = Params()) {
     private var enemyHx = Double.NaN
     private var enemyHy = Double.NaN
     private var enemySinceT = Double.NaN
+    private var seenMin = Double.NaN
+    private var seenMax = Double.NaN
 
-    fun reset() { lastMoveT = Double.NaN; lastSeenAngle = Double.NaN; enemyHx = Double.NaN; enemyHy = Double.NaN; enemySinceT = Double.NaN }
+    fun reset() { lastMoveT = Double.NaN; lastSeenAngle = Double.NaN; enemyHx = Double.NaN; enemyHy = Double.NaN; enemySinceT = Double.NaN; seenMin = Double.NaN; seenMax = Double.NaN }
 
     fun decide(obs: MrGunObservation, sinceLastTapSec: Double, frameDtSec: Double): Decision {
         val t = obs.tNanos / 1e9
-        if (obs.transition) { enemyHx = Double.NaN; enemyHy = Double.NaN; return Decision(false, "transition", "") }
+        if (obs.transition) { enemyHx = Double.NaN; enemyHy = Double.NaN; seenMin = Double.NaN; seenMax = Double.NaN; return Decision(false, "transition", "") }
+        if (!obs.angleDeg.isNaN()) { if (seenMin.isNaN() || obs.angleDeg < seenMin) seenMin = obs.angleDeg; if (seenMax.isNaN() || obs.angleDeg > seenMax) seenMax = obs.angleDeg }
         if (!obs.angleDeg.isNaN()) {
             if (lastSeenAngle.isNaN() || abs(obs.angleDeg - lastSeenAngle) > 0.3 || lastMoveT.isNaN()) lastMoveT = t
             lastSeenAngle = obs.angleDeg
@@ -71,8 +74,10 @@ class AimController(private val p: Params = Params()) {
             MrGunDetector.angleTo(px, py, e.maxX.toDouble(), e.maxY.toDouble()),
         )
         val bodyLo = corners.min(); val bodyHi = corners.max()
-        val bodyMid = (bodyLo + bodyHi) / 2
-        val bodyHalf = (bodyHi - bodyLo) / 2
+        // Điểm ngắm thân = 35 % từ đỉnh khung (vai/ngực): lệch vì trễ vẫn trúng thân hoặc đầu, không rơi xuống chân
+        val bodyAim = MrGunDetector.angleTo(px, py, (e.minX + e.maxX) / 2.0, e.minY + 0.42 * (e.maxY - e.minY))
+        val bodyMid = bodyAim
+        val bodyHalf = min(bodyAim - bodyLo, bodyHi - bodyAim)
         // Dải góc trúng đầu
         val headAng = MrGunDetector.angleTo(px, py, e.headX, e.headY)
         val headDist = sqrt((e.headX - px) * (e.headX - px) + (e.headY - py) * (e.headY - py))
@@ -86,6 +91,7 @@ class AimController(private val p: Params = Params()) {
         var predicted = obs.angleDeg + w * p.latencySec
         if (!obs.sweepMaxDeg.isNaN() && predicted > obs.sweepMaxDeg) predicted = 2 * obs.sweepMaxDeg - predicted
         if (!obs.sweepMinDeg.isNaN() && predicted < obs.sweepMinDeg) predicted = 2 * obs.sweepMinDeg - predicted
+        // Biên chưa xác nhận mà dự đoán vượt quá góc từng thấy → không biết vạch có đảo chiều không → đợi
         val err = MrGunDetector.wrapDeg(predicted - target)
         // Bước góc của MỘT khung theo nhịp khung đo được: đang tiến tới mục tiêu mà còn xa hơn một bước thì khung sau
         // sẽ gần hơn → đợi; đã ở trong dải trúng mà không còn tiến tới (vừa qua đỉnh, hoặc đang lùi) thì bắn ngay,

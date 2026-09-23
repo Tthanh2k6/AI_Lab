@@ -226,14 +226,18 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
     private class Bound {
         var value = Double.NaN
         var confirmed = false
-        val exposed: Double get() = if (confirmed) value else Double.NaN
-        fun reset() { value = Double.NaN; confirmed = false }
+        /** Số lần đảo chiều liên tiếp xác nhận cùng một biên (lệch ≤ 4°). Chỉ tin biên khi ≥ 2: một lần đảo chiều
+         *  đơn lẻ có thể là nhiễu góc, và phản xạ dự đoán ở một biên sai sẽ bắn trượt. */
+        var hits = 0
+        val exposed: Double get() = if (confirmed && hits >= 2) value else Double.NaN
+        fun reset() { value = Double.NaN; confirmed = false; hits = 0 }
         fun confirm(ext: Double) {
-            value = if (value.isNaN() || !confirmed || abs(ext - value) > 6.0) ext else 0.5 * value + 0.5 * ext
+            if (value.isNaN() || !confirmed || abs(ext - value) > 4.0) { value = ext; hits = 1 }
+            else { value = 0.5 * value + 0.5 * ext; hits++ }
             confirmed = true
         }
         fun push(a: Double, tol: Double, isMax: Boolean) {
-            if (value.isNaN() || (if (isMax) a > value + tol else a < value - tol)) { value = a; confirmed = false }
+            if (value.isNaN() || (if (isMax) a > value + tol else a < value - tol)) { value = a; confirmed = false; hits = 0 }
         }
     }
     private val sweepMinR = Bound(); private val sweepMaxR = Bound()
