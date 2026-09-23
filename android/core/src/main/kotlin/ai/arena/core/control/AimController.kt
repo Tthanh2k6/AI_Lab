@@ -21,19 +21,36 @@ class AimController(private val p: Params = Params()) {
         val latencySec: Double = 0.08,
         /** Rung của độ trễ (giây) → sai số góc = ω × jitter. */
         val jitterSec: Double = 0.012,
+        /** Dưới tốc độ góc này CHỈ từ chối khi vạch thật sự đứng yên (không nhúc nhích quá stillSec) — vạch chậm lại
+         *  ở hai đầu lắc vẫn được bắn. */
         val minAngularVelDegPerSec: Double = 8.0,
+        val stillSec: Double = 0.3,
+        /** Vận tốc góc đo được vượt mức này là nhiễu (vạch Mr Gun ≤ ~150°/s) → không bắn theo dự đoán đó. */
+        val maxAngularVelDegPerSec: Double = 240.0,
         val extraMarginDeg: Double = 0.6,
         val cooldownSec: Double = 0.45,
     )
 
     class Decision(val tap: Boolean, val reason: String, val detail: String)
 
+    private var lastMoveT = Double.NaN
+    private var lastSeenAngle = Double.NaN
+
+    fun reset() { lastMoveT = Double.NaN; lastSeenAngle = Double.NaN }
+
     fun decide(obs: MrGunObservation, sinceLastTapSec: Double, frameDtSec: Double): Decision {
         if (obs.transition) return Decision(false, "transition", "")
+        val t = obs.tNanos / 1e9
+        if (!obs.angleDeg.isNaN()) {
+            if (lastSeenAngle.isNaN() || abs(obs.angleDeg - lastSeenAngle) > 0.3 || lastMoveT.isNaN()) lastMoveT = t
+            lastSeenAngle = obs.angleDeg
+        }
         val e = obs.enemy ?: return Decision(false, "no-enemy", "")
         if (!obs.pivotValid || obs.angleDeg.isNaN()) return Decision(false, "no-line", "")
         val w = obs.angularVelDegPerSec
-        if (w.isNaN() || abs(w) < p.minAngularVelDegPerSec) return Decision(false, "line-still", "w=%.0f".format(w))
+        if (w.isNaN()) return Decision(false, "line-still", "w=NaN")
+        if (abs(w) > p.maxAngularVelDegPerSec) return Decision(false, "line-jump", "w=%.0f".format(w))
+        if (abs(w) < p.minAngularVelDegPerSec && t - lastMoveT > p.stillSec) return Decision(false, "line-still", "w=%.0f".format(w))
         if (sinceLastTapSec < p.cooldownSec) return Decision(false, "cooldown", "")
 
         val px = obs.pivotX; val py = obs.pivotY
@@ -61,14 +78,18 @@ class AimController(private val p: Params = Params()) {
         if (!obs.sweepMaxDeg.isNaN() && predicted > obs.sweepMaxDeg) predicted = 2 * obs.sweepMaxDeg - predicted
         if (!obs.sweepMinDeg.isNaN() && predicted < obs.sweepMinDeg) predicted = 2 * obs.sweepMinDeg - predicted
         val err = MrGunDetector.wrapDeg(predicted - target)
-        val halfStep = abs(w) * frameDtSec / 2
-        val detail = "θ=%.1f w=%.0f pred=%.1f tgt=%.1f(%s) tol=%.1f err=%.1f step/2=%.1f".format(
-            obs.angleDeg, w, predicted, target, if (aimHead) "head" else "body", tol, err, halfStep)
+        // Bước góc của MỘT khung theo nhịp khung đo được: đang tiến tới mục tiêu mà còn xa hơn một bước thì khung sau
+        // sẽ gần hơn → đợi; đã ở trong dải trúng mà không còn tiến tới (vừa qua đỉnh, hoặc đang lùi) thì bắn ngay,
+        // không chờ lượt quét sau.
+        val step = abs(w) * frameDtSec
+        val approaching = err * w < 0
+        val detail = "θ=%.1f w=%.0f pred=%.1f tgt=%.1f(%s) tol=%.1f err=%.1f step=%.1f".format(
+            obs.angleDeg, w, predicted, target, if (aimHead) "head" else "body", tol, err, step)
         // Mục tiêu ngoài biên lắc → đợi (phản xạ đã xử lý phần lớn; đây là trường hợp không bao giờ tới)
         val beyondMax = !obs.sweepMaxDeg.isNaN() && target > obs.sweepMaxDeg + 1
         val beyondMin = !obs.sweepMinDeg.isNaN() && target < obs.sweepMinDeg - 1
         if ((beyondMax || beyondMin) && !aimHead) return Decision(false, "unreachable", detail)
-        val hit = abs(err) <= tol && abs(err) <= halfStep + 0.25
+        val hit = abs(err) <= tol && (!approaching || abs(err) <= step + 0.25)
         return Decision(hit, if (hit) (if (aimHead) "fire-head" else "fire-body") else "wait", detail)
     }
 

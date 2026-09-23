@@ -180,6 +180,68 @@ class MrGunRealFramesTest {
         assertTrue(o.restartX.isNaN() && o.declineX.isNaN(), "no button on the start screen may be taken for the restart / decline button")
     }
 
+    /** Chẩn đoán một ảnh tĩnh ngoài (MRGUN_STILL=đường dẫn png, MRGUN_PIVOT=x,y): in khối tĩnh + địch. */
+    @Test
+    fun diagExternalStill() {
+        val path = System.getenv("MRGUN_STILL") ?: return
+        val frame = load(File(path))
+        val det = MrGunDetector(frame.width, frame.height)
+        repeat(3) { det.process(frame, it * 16_666_667L) }
+        System.getenv("MRGUN_PIVOT")?.split(",")?.let { det.debugForcePivot(it[0].toDouble(), it[1].toDouble()) }
+        val o = det.process(frame, 3 * 16_666_667L)
+        println("still: enemy=${o.enemy} | ${det.debug}")
+        for (b in det.debugBlobs()) {
+            val w = b[1] - b[0] + 1; val hh = b[3] - b[2] + 1
+            println("  blob x=%d..%d y=%d..%d n=%d w=%d h=%d aspect=%.2f density=%.2f hFrac=%.3f".format(b[0], b[1], b[2], b[3], b[4], w, hh, hh.toDouble() / w, b[4].toDouble() / (w * hh), hh.toDouble() / frame.height))
+        }
+        val y0 = (System.getenv("MRGUN_MAPY") ?: "200").toInt()
+        for (y in y0 until minOf(frame.height, y0 + 60) step 2) {
+            val sb = StringBuilder("%3d ".format(y))
+            for (x in 0 until frame.width step 2) sb.append(if (det.debugForeground(x, y)) '#' else if (det.debugMoving(x, y)) '~' else '.')
+            println(sb)
+        }
+    }
+
+    /** Chẩn đoán quét góc: MRGUN_SEQ=thư mục, MRGUN_SEQ_RANGE=a,b (khung), MRGUN_PIVOT=x,y. */
+    @Test
+    fun diagScan() {
+        val dir = System.getenv("MRGUN_SEQ")?.let { File(it) } ?: return
+        val (a, b) = (System.getenv("MRGUN_SEQ_RANGE") ?: "1,10").split(",").map { it.toInt() }
+        val files = dir.listFiles { f -> f.name.endsWith(".png") }!!.sortedBy { it.name }.subList(a, b + 1)
+        var det: MrGunDetector? = null
+        for ((i, f) in files.withIndex()) {
+            val frame = load(f)
+            val d = det ?: MrGunDetector(frame.width, frame.height).also { det = it }
+            if (i == 2) System.getenv("MRGUN_PIVOT")?.split(",")?.let { d.debugForcePivot(it[0].toDouble(), it[1].toDouble()) }
+            val o = d.process(frame, i * 16_666_667L)
+            println("%3d %s | angle=%.1f | %s".format(i, f.name, o.angleDeg, d.debug))
+            if (i >= 2) {
+                val c = d.debugScanCounts
+                val sb = StringBuilder("    counts: ")
+                for (bin in 0..150 step 3) sb.append("%d:%d ".format(bin - 30, c[bin]))
+                println(sb)
+            }
+        }
+        val d = det!!
+        val (px, py) = (System.getenv("MRGUN_PIVOT") ?: "30,263").split(",").map { it.toDouble().toInt() }
+        println("map around pivot ($px,$py): # = fg free, b = fg blocked, ~ = moving, | = line mask, . = bg")
+        for (y in (py - 30).coerceAtLeast(0)..(py + 20).coerceAtMost(d.height - 1)) {
+            val sb = StringBuilder("%3d ".format(y))
+            for (x in (px - 15).coerceAtLeast(0)..(px + 95).coerceAtMost(d.width - 1)) {
+                val fgp = d.debugForeground(x, y)
+                sb.append(when {
+                    x == px && y == py -> '@'
+                    d.debugMoving(x, y) -> '~'
+                    fgp && d.debugBlocked(x, y) -> 'b'
+                    fgp -> '#'
+                    d.debugLineMask(x, y) -> '|'
+                    else -> '.'
+                })
+            }
+            println(sb)
+        }
+    }
+
     @Test
     fun traceExternalFrames() {
         val dir = System.getenv("MRGUN_FRAMES")?.let { File(it) } ?: run { println("MRGUN_FRAMES unset — skip"); return }

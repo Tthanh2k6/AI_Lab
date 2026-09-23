@@ -35,7 +35,8 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
     private var stableFrames = 0
 
     override fun onFrame(frame: Frame, tNanos: Long): Output {
-        if (firstT < 0) { firstT = tNanos; lastTapT = tNanos }
+        // Không áp cooldown ở khung đầu: quyết định bắn đầu tiên không được chậm hơn lượt quét đầu tiên
+        if (firstT < 0) { firstT = tNanos; lastTapT = tNanos - 10_000_000_000L }
         if (lastT > 0) {
             val dt = (tNanos - lastT) / 1e9
             if (dt > 0.001 && dt < 0.5) fps = 0.9 * fps + 0.1 * (1.0 / dt)
@@ -81,7 +82,7 @@ class MrGunAgent(val width: Int, val height: Int) : GameAgent {
     }
 
     override fun reset() {
-        detector.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0; restarts = 0
+        detector.reset(); controller.reset(); lastT = -1; lastTapT = -1; firstT = -1; lastLineT = -1; shots = 0; restarts = 0
         stableKind = ""; stableX = Double.NaN; stableY = Double.NaN; stableFrames = 0
     }
 }
