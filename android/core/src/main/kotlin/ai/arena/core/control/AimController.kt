@@ -28,24 +28,33 @@ class AimController(private val p: Params = Params()) {
         /** Vận tốc góc đo được vượt mức này là nhiễu (vạch Mr Gun ≤ ~150°/s) → không bắn theo dự đoán đó. */
         val maxAngularVelDegPerSec: Double = 240.0,
         val extraMarginDeg: Double = 0.6,
-        val cooldownSec: Double = 0.45,
+        val cooldownSec: Double = 0.5,
+        /** Địch vừa xuất hiện / vừa dịch chuyển phải đứng yên ít nhất chừng này mới bắn (địch còn nhảy vào vị trí). */
+        val enemySettleSec: Double = 0.4,
+        val enemyMovePx: Double = 3.0,
     )
 
     class Decision(val tap: Boolean, val reason: String, val detail: String)
 
     private var lastMoveT = Double.NaN
     private var lastSeenAngle = Double.NaN
+    private var enemyHx = Double.NaN
+    private var enemyHy = Double.NaN
+    private var enemySinceT = Double.NaN
 
-    fun reset() { lastMoveT = Double.NaN; lastSeenAngle = Double.NaN }
+    fun reset() { lastMoveT = Double.NaN; lastSeenAngle = Double.NaN; enemyHx = Double.NaN; enemyHy = Double.NaN; enemySinceT = Double.NaN }
 
     fun decide(obs: MrGunObservation, sinceLastTapSec: Double, frameDtSec: Double): Decision {
-        if (obs.transition) return Decision(false, "transition", "")
         val t = obs.tNanos / 1e9
+        if (obs.transition) { enemyHx = Double.NaN; enemyHy = Double.NaN; return Decision(false, "transition", "") }
         if (!obs.angleDeg.isNaN()) {
             if (lastSeenAngle.isNaN() || abs(obs.angleDeg - lastSeenAngle) > 0.3 || lastMoveT.isNaN()) lastMoveT = t
             lastSeenAngle = obs.angleDeg
         }
-        val e = obs.enemy ?: return Decision(false, "no-enemy", "")
+        val e = obs.enemy ?: run { enemyHx = Double.NaN; enemyHy = Double.NaN; return Decision(false, "no-enemy", "") }
+        // Địch phải ổn định vị trí: mới xuất hiện hoặc vừa dịch > enemyMovePx → tính lại thời điểm ổn định
+        if (enemyHx.isNaN() || abs(e.headX - enemyHx) > p.enemyMovePx || abs(e.headY - enemyHy) > p.enemyMovePx) { enemyHx = e.headX; enemyHy = e.headY; enemySinceT = t }
+        if (t - enemySinceT < p.enemySettleSec) return Decision(false, "enemy-settling", "%.2fs".format(t - enemySinceT))
         if (!obs.pivotValid || obs.angleDeg.isNaN()) return Decision(false, "no-line", "")
         val w = obs.angularVelDegPerSec
         if (w.isNaN()) return Decision(false, "line-still", "w=NaN")
