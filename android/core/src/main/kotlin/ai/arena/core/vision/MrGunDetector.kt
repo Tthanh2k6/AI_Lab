@@ -955,7 +955,11 @@ class MrGunDetector(val width: Int, val height: Int, private val p: Params = Par
                     if ((dir > 0) != pendingIsMax) {
                         pendingRun++
                         if (pendingRun >= p.boundConfirmAfter) {
-                            if (pendingIsMax) boundMax(pendingExt).confirm(pendingExt) else boundMin(pendingExt).confirm(pendingExt)
+                            // Vạch vẽ SAU nhân vật: quét qua địch thì phần lộ ra ngắn lại, góc đo khựng/nhảy như đảo chiều giả
+                            // ngay tại hướng địch → không xác nhận biên trong ±12° quanh hướng địch
+                            val e = enemy
+                            val nearEnemy = e != null && pivotValid && abs(wrapDeg(pendingExt - angleTo(pivotX, pivotY, e.centerX, (e.minY + e.maxY) / 2.0))) < 12.0
+                            if (!nearEnemy) { if (pendingIsMax) boundMax(pendingExt).confirm(pendingExt) else boundMin(pendingExt).confirm(pendingExt) }
                             pendingExt = Double.NaN
                         }
                     } else pendingExt = Double.NaN

@@ -18,7 +18,7 @@ class AimController(private val p: Params = Params()) {
 
     class Params(
         /** Độ trễ từ lúc phát lệnh tap đến lúc game bắn (giây) — chưa tự đo, dùng giá trị mặc định. */
-        val latencySec: Double = 0.14,
+        val latencySec: Double = 0.11,
         /** Rung của độ trễ (giây) → sai số góc = ω × jitter. */
         val jitterSec: Double = 0.012,
         /** Dưới tốc độ góc này CHỈ từ chối khi vạch thật sự đứng yên (không nhúc nhích quá stillSec) — vạch chậm lại
