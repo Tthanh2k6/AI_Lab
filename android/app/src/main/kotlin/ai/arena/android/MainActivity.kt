@@ -13,6 +13,7 @@ import ai.arena.core.agent.GameKind
 import android.widget.Button
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +74,24 @@ class MainActivity : AppCompatActivity() {
             val rb = RadioButton(this).apply { id = 1000 + i; text = kind.label; isChecked = kind == saved }
             gameGroup.addView(rb)
         }
+
+        // Độ trễ bắn Mr Gun: 0–300 ms, bước 10 ms; lưu lại và áp dụng tức thì cho tác nhân đang chạy
+        val prefs = getSharedPreferences("agent", MODE_PRIVATE)
+        AgentStatus.mrGunLatencyMs = prefs.getInt("mrgun_latency_ms", AgentStatus.mrGunLatencyMs)
+        val txtLatency = findViewById<TextView>(R.id.txtLatency)
+        val seek = findViewById<SeekBar>(R.id.seekLatency)
+        fun showLatency() { txtLatency.text = "Độ trễ bắn (Mr Gun): ${AgentStatus.mrGunLatencyMs} ms" }
+        seek.progress = AgentStatus.mrGunLatencyMs / 10
+        showLatency()
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
+                AgentStatus.mrGunLatencyMs = progress * 10
+                prefs.edit().putInt("mrgun_latency_ms", AgentStatus.mrGunLatencyMs).apply()
+                showLatency()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) = Unit
+            override fun onStopTrackingTouch(sb: SeekBar) = Unit
+        })
 
         findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))

@@ -28,6 +28,25 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal" />
 
+        <TextView
+            android:id="@+id/txtLatency"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textStyle="bold" />
+
+        <SeekBar
+            android:id="@+id/seekLatency"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="30" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/latency_hint"
+            android:textSize="12sp" />
+
         <Button
             android:id="@+id/btnAccessibility"
             android:layout_width="match_parent"

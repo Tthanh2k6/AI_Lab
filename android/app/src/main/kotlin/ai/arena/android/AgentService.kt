@@ -198,6 +198,7 @@ class AgentService : Service() {
             img.close()
         }
         val ag = agent ?: return
+        (ag as? ai.arena.core.agent.MrGunAgent)?.controller?.latencySec = AgentStatus.mrGunLatencyMs / 1000.0
         val t = SystemClock.elapsedRealtimeNanos()
         val out = ag.onFrame(Frame(captureW, captureH, rgb), t)
         val procMs = (SystemClock.elapsedRealtimeNanos() - t) / 1e6

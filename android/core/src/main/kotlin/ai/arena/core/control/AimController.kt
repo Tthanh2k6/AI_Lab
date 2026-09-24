@@ -36,6 +36,9 @@ class AimController(private val p: Params = Params()) {
 
     class Decision(val tap: Boolean, val reason: String, val detail: String)
 
+    /** Độ trễ tap→bắn đang dùng (giây); app cho người dùng chỉnh trực tiếp khi đang chạy. */
+    @Volatile var latencySec: Double = p.latencySec
+
     private var lastMoveT = Double.NaN
     private var lastSeenAngle = Double.NaN
     private var enemyHx = Double.NaN
@@ -88,7 +91,7 @@ class AimController(private val p: Params = Params()) {
         val target = if (aimHead) headAng else bodyMid
         val tol = if (aimHead) headHalf - sigma * 0.5 else max(0.5, bodyHalf - sigma)
 
-        var predicted = obs.angleDeg + w * p.latencySec
+        var predicted = obs.angleDeg + w * latencySec
         if (!obs.sweepMaxDeg.isNaN() && predicted > obs.sweepMaxDeg) predicted = 2 * obs.sweepMaxDeg - predicted
         if (!obs.sweepMinDeg.isNaN() && predicted < obs.sweepMinDeg) predicted = 2 * obs.sweepMinDeg - predicted
         // Biên chưa xác nhận mà dự đoán vượt quá góc từng thấy → không biết vạch có đảo chiều không → đợi
@@ -98,8 +101,8 @@ class AimController(private val p: Params = Params()) {
         // không chờ lượt quét sau.
         val step = abs(w) * frameDtSec
         val approaching = err * w < 0
-        val detail = "θ=%.1f w=%.0f pred=%.1f tgt=%.1f(%s) tol=%.1f err=%.1f step=%.1f".format(
-            obs.angleDeg, w, predicted, target, if (aimHead) "head" else "body", tol, err, step)
+        val detail = "θ=%.1f w=%.0f pred=%.1f tgt=%.1f(%s) tol=%.1f err=%.1f step=%.1f lat=%.0fms".format(
+            obs.angleDeg, w, predicted, target, if (aimHead) "head" else "body", tol, err, step, latencySec * 1000)
         // Mục tiêu ngoài biên lắc → đợi (phản xạ đã xử lý phần lớn; đây là trường hợp không bao giờ tới)
         val beyondMax = !obs.sweepMaxDeg.isNaN() && target > obs.sweepMaxDeg + 1
         val beyondMin = !obs.sweepMinDeg.isNaN() && target < obs.sweepMinDeg - 1

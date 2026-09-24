@@ -76,8 +76,8 @@ class MrGunAgent(val width: Int, val height: Int, aimParams: AimController.Param
         }
 
         if (tap) { lastTapT = tNanos; if (reason.startsWith("fire")) shots++ }
-        val status = "%.0f fps · %s · bắn %d · chơi lại %d · %s%s".format(
-            fps, if (obs.transition) "chuyển cảnh" else detector.debug, shots, restarts, if (tap) "TAP:" else "", reason)
+        val status = "%.0f fps · trễ %.0f ms · %s · bắn %d · chơi lại %d · %s%s".format(
+            fps, controller.latencySec * 1000, if (obs.transition) "chuyển cảnh" else detector.debug, shots, restarts, if (tap) "TAP:" else "", reason)
         return Output(obs, tap, reason, status, d.detail, tapX, tapY)
     }
 

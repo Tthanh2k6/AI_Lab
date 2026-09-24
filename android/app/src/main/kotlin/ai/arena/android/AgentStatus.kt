@@ -10,4 +10,6 @@ object AgentStatus {
     @Volatile var lastError: String = ""
     /** Nội dung được chụp có đang hiển thị không (MediaProjection báo, Android 14+). */
     @Volatile var contentVisible: Boolean = true
+    /** Độ trễ tap→bắn người dùng chỉnh (ms) cho Mr Gun; áp dụng ngay cả khi đang chạy. */
+    @Volatile var mrGunLatencyMs: Int = 110
 }

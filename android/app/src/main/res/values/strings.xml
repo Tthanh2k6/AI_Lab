@@ -5,6 +5,7 @@
     <string name="accessibility_desc">Cho phép tác nhân AI chạm vào màn hình game (chỉ dùng cá nhân). Dịch vụ không đọc nội dung màn hình.</string>
     <string name="intro">Tác nhân đọc màn hình game qua chụp màn hình và tự tap. Chọn game, làm theo 3 bước rồi mở game lên.</string>
     <string name="pick_game">Game:</string>
+    <string name="latency_hint">Mr Gun: bắn trễ (đạn đi sau đầu địch) → giảm; bắn sớm (đạn đi trước) → tăng. Có hiệu lực ngay khi đang chạy.</string>
     <string name="btn_accessibility">1. Bật dịch vụ Trợ năng</string>
     <string name="btn_notification">2. Cấp quyền thông báo</string>
     <string name="btn_start">3. Chọn game &amp; bắt đầu</string>
