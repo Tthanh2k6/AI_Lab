@@ -39,13 +39,13 @@
 
 | Environment | Core Algorithm / Architecture | Real-Time Telemetry & Controls |
 | :--- | :--- | :--- |
-| **Gomoku (20×20 Caro)** | **Web Worker Minimax** (Alpha-Beta pruning, Iterative Deepening, Zobrist Hashing Transposition Table, Killer/History Heuristics) vs. **MCTS (UCT)** | Head-to-head AI vs. AI or Human vs. AI, search depth, node evaluation speed & self-evolving heuristic weights |
+| **Gomoku (20×20 Caro)** | **Web Worker Minimax** (Alpha-Beta pruning, Iterative Deepening, Zobrist Hashing Transposition Table, threat-based move ordering) vs. **MCTS (UCT)** | Head-to-head AI vs. AI or Human vs. AI, search depth, node evaluation speed & self-evolving heuristic weights |
 | **Connect Four** | **Minimax + Alpha-Beta Pruning** with positional window evaluation | Configurable search depth and real-time column score visualization |
 | **2048** | **Expectimax Search** with monotonicity, smoothness & empty-tile heuristics | Chance-node probability trees and move throughput |
-| **AI Racing (2D)** | **Feedforward Neural Network + Genetic Evolution** with 7-ray LIDAR sensors | Procedural track generator, custom track drawing tool, live neural synapse HUD & fitness curves |
+| **AI Racing (2D)** | **Feedforward Neural Network + Genetic Evolution** with configurable ray-cast distance sensors (5 by default) | Procedural track generator, custom track drawing tool, live neural synapse HUD & fitness curves |
 | **Flappy Bird AI** | **Neuroevolution** (Population-based elitism, crossover & Gaussian weight mutation) | Multi-agent population survival telemetry across generations |
 | **Q-Maze** | **Tabular Q-Learning** ($\epsilon$-greedy exploration + Bellman updates) | Live state-action $Q(s,a)$ heatmap arrows & reward convergence |
-| **Soccer 3D** | **3D Multi-Agent Neuroevolution** in **Three.js** | Physics-based ball interception, team coordination & goal scoring |
+| **Soccer 3D** | **1-vs-1 Neuroevolution** in **Three.js** | Physics-based ball interception & goal scoring (one orange vs. one blue player) |
 | **Tag 3D** | **Competitive Co-Evolution (Chaser vs. Runner)** in **Three.js** | Dual-species adversarial fitness evolution with 3D obstacle avoidance |
 | **Cell War** | **Multi-Faction Heuristic Cellular Automata** | Territory expansion dynamics and resource allocation |
 
