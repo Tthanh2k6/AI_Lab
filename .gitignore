@@ -33,3 +33,5 @@ android/captures/
 *.njsproj
 *.sln
 *.sw?
+agent.md
+CODEBASE.md
